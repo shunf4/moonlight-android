@@ -2175,10 +2175,13 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         }
 
                         if (event.getEventTime() - fourFingerDownTime < THREE_FINGER_TAP_THRESHOLD) {
-                            streamView.setTranslationX(0);
-                            streamView.setTranslationY(0);
+                            streamView.setTranslationX(0.0f);
+                            streamView.setTranslationY(0.0f);
                             streamView.setScaleX(1.0f);
                             streamView.setScaleY(1.0f);
+                            savedScale = 1.0f;
+                            savedTranslateX = 0.0f;
+                            savedTranslateY = 0.0f;
                             conn.sendMousePosition((short) (streamView.getWidth() / 2), (short) (streamView.getHeight() / 2), (short) streamView.getWidth(), (short) streamView.getHeight());
                             Toast.makeText(this, "Reset transform and mouse position", Toast.LENGTH_SHORT).show();
                             return true;
