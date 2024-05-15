@@ -46,10 +46,11 @@ public class AbsoluteTouchContext implements TouchContext {
     private final ScaleTransformCallback scaleTransformCallback;
     private boolean isPinchZoomTimedOut;
     private boolean hasEverScrolled;
-    private boolean confirmedLongPress;
+    private boolean confirmedLongPressRightClick;
+    private boolean confirmedLongPressHold;
     private boolean confirmedTap;
 
-    private final Runnable longPressRunnable = new Runnable() {
+    private final Runnable longPressRightClickRunnable = new Runnable() {
         @Override
         public void run() {
             if (hasEverScrolled || confirmedScaleTranslateGetter.get()) {
@@ -59,16 +60,42 @@ public class AbsoluteTouchContext implements TouchContext {
 //            cancelTapDownTimer();
 
             // Switch from a left click to a right click after a long press
-            confirmedLongPress = true;
+
             if (confirmedTap) {
                 if (!leftButtonAlreadyUp) {
                     leftButtonAlreadyUp = true;
                     conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_LEFT);
                 }
+                confirmedTap = false;
             } else {
                 AbsoluteTouchContext.this.updatePosition(lastTouchLocationX ,lastTouchLocationY, lastTouchLocationXRel, lastTouchLocationYRel);
             }
-            conn.sendMouseButtonDown(MouseButtonPacket.BUTTON_RIGHT);
+//            conn.sendMouseButtonDown(MouseButtonPacket.BUTTON_RIGHT);
+            confirmedLongPressRightClick = true;
+        }
+    };
+
+    private final Runnable longPressHoldRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (hasEverScrolled || confirmedScaleTranslateGetter.get()) {
+                return;
+            }
+            cancelLongPressRightClickTimer();
+
+            if (confirmedLongPressRightClick) {
+                confirmedLongPressRightClick = false;
+                conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_RIGHT);
+            }
+
+            if (confirmedTap) {
+                // holding
+            } else {
+                AbsoluteTouchContext.this.updatePosition(lastTouchLocationX, lastTouchLocationY, lastTouchLocationXRel, lastTouchLocationYRel);
+                tapConfirmed(false);
+            }
+
+            confirmedLongPressHold = true;
         }
     };
 
@@ -127,7 +154,6 @@ public class AbsoluteTouchContext implements TouchContext {
 
     private static final int SCROLL_SPEED_FACTOR = 3;
 
-    private static final int LONG_PRESS_TIME_THRESHOLD = 650;
     private static final int LONG_PRESS_DISTANCE_THRESHOLD = 30;
 
     private static final int DOUBLE_TAP_TIME_THRESHOLD = 250;
@@ -197,7 +223,7 @@ public class AbsoluteTouchContext implements TouchContext {
         lastTouchLocationY = lastTouchDownY = eventY;
         lastTouchLocationYRel = lastTouchDownYRel = yRel;
         lastTouchDownTime = eventTime;
-        cancelled = confirmedTap = confirmedLongPress = hasEverScrolled = false;
+        cancelled = confirmedTap = confirmedLongPressRightClick = confirmedLongPressHold = hasEverScrolled = false;
 
         confirmedScaleTranslateSetter.accept(false);
         doubleFingerInitialSpacingSetter.accept(100.0d);
@@ -206,7 +232,8 @@ public class AbsoluteTouchContext implements TouchContext {
         if (actionIndex == 0) {
             // Start the timers
             // startTapDownTimer();
-            startLongPressTimer();
+            startLongPressRightClickTimer();
+            startLongPressHoldTimer();
         }
 
         // track pinch/zoom gesture in actionIndex=1 (second touch point)
@@ -283,14 +310,19 @@ public class AbsoluteTouchContext implements TouchContext {
 
         if (actionIndex == 0) {
             // Cancel the timers
-            cancelLongPressTimer();
+            cancelLongPressRightClickTimer();
+            cancelLongPressHoldTimer();
             cancelScaleTranslateTimer();
 //            cancelTapDownTimer();
 
             // Raise the mouse buttons that we currently have down
-            if (confirmedLongPress) {
-                conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_RIGHT);
+            if (confirmedLongPressRightClick) {
+                doRightTap();
+                handler.postDelayed(() -> {
+                    conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_RIGHT);
+                }, 100);
             } else if (confirmedTap && !leftButtonAlreadyUp) {
+                // including hold
                 leftButtonAlreadyUp = true;
                 conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_LEFT);
             } else {
@@ -298,7 +330,7 @@ public class AbsoluteTouchContext implements TouchContext {
                 if (!confirmedScaleTranslateGetter.get() && /* !hasEverScrolled won't work, because it's actionIndex 0 */ maxPointerCountInGesture == 1) {
                     // We'll need to send the touch down and up events now at the
                     // original touch down position.
-                    tapConfirmed();
+                    tapConfirmed(true);
 
                     // Release the left mouse button in 100ms to allow for apps that use polling
                     // to detect mouse button presses.
@@ -314,9 +346,14 @@ public class AbsoluteTouchContext implements TouchContext {
         lastTouchUpTime = eventTime;
     }
 
-    private void startLongPressTimer() {
-        cancelLongPressTimer();
-        handler.postDelayed(longPressRunnable, LONG_PRESS_TIME_THRESHOLD);
+    private void startLongPressRightClickTimer() {
+        cancelLongPressRightClickTimer();
+        handler.postDelayed(longPressRightClickRunnable, 400);
+    }
+
+    private void startLongPressHoldTimer() {
+        cancelLongPressHoldTimer();
+        handler.postDelayed(longPressHoldRunnable, 1000);
     }
 
     private void startScaleTranslateTimer() {
@@ -330,8 +367,12 @@ public class AbsoluteTouchContext implements TouchContext {
         handler.removeCallbacks(scaleTranslatePinchZoomTimerRunnable);
     }
 
-    private void cancelLongPressTimer() {
-        handler.removeCallbacks(longPressRunnable);
+    private void cancelLongPressRightClickTimer() {
+        handler.removeCallbacks(longPressRightClickRunnable);
+    }
+
+    private void cancelLongPressHoldTimer() {
+        handler.removeCallbacks(longPressHoldRunnable);
     }
 
 //    private void startTapDownTimer() {
@@ -343,22 +384,33 @@ public class AbsoluteTouchContext implements TouchContext {
 //        handler.removeCallbacks(tapDownRunnable);
 //    }
 
-    private void tapConfirmed() {
-        if (confirmedTap || confirmedLongPress || hasEverScrolled || confirmedScaleTranslateGetter.get()) {
+    private void tapConfirmed(boolean optimizeForDoubleClick) {
+        if (confirmedTap || confirmedLongPressRightClick || confirmedLongPressHold || hasEverScrolled || confirmedScaleTranslateGetter.get()) {
             return;
         }
 
         confirmedTap = true;
 //        cancelTapDownTimer();
 
-        // Left button down at original position
-        if (lastTouchDownTime - lastTouchUpTime > DOUBLE_TAP_TIME_THRESHOLD ||
-                distanceExceeds(lastTouchDownX - lastTouchUpX, lastTouchDownY - lastTouchUpY, DOUBLE_TAP_DISTANCE_THRESHOLD)) {
-            // Don't reposition for finger down events within the deadzone. This makes double-clicking easier.
-            updatePosition(lastTouchDownX, lastTouchDownY, lastTouchDownXRel, lastTouchDownYRel);
+        if (optimizeForDoubleClick) {
+            // Left button down at original position
+            if (lastTouchDownTime - lastTouchUpTime > DOUBLE_TAP_TIME_THRESHOLD ||
+                    distanceExceeds(lastTouchDownX - lastTouchUpX, lastTouchDownY - lastTouchUpY, DOUBLE_TAP_DISTANCE_THRESHOLD)) {
+                // Don't reposition for finger down events within the deadzone. This makes double-clicking easier.
+                updatePosition(lastTouchDownX, lastTouchDownY, lastTouchDownXRel, lastTouchDownYRel);
+            }
         }
+
         conn.sendMouseButtonDown(MouseButtonPacket.BUTTON_LEFT);
         leftButtonAlreadyUp = false;
+    }
+
+    private void doRightTap() {
+        if (confirmedTap || hasEverScrolled || confirmedScaleTranslateGetter.get() || !confirmedLongPressRightClick || confirmedLongPressHold) {
+            return;
+        }
+
+        conn.sendMouseButtonDown(MouseButtonPacket.BUTTON_RIGHT);
     }
 
     private void checkForConfirmedScaleTranslate(int eventX, int eventY) {
@@ -394,12 +446,13 @@ public class AbsoluteTouchContext implements TouchContext {
         if (actionIndex == 0) {
             if (distanceExceeds(eventX - lastTouchDownX, eventY - lastTouchDownY, LONG_PRESS_DISTANCE_THRESHOLD)) {
                 // Moved too far since touch down. Cancel the long press timer.
-                cancelLongPressTimer();
+                cancelLongPressRightClickTimer();
+                cancelLongPressHoldTimer();
             }
 
             // Ignore motion within the deadzone period after touch down
             if ((confirmedTap || distanceExceeds(eventX - lastTouchDownX, eventY - lastTouchDownY, TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD)) && maxPointerCountInGesture == 1 && !confirmedScaleTranslateGetter.get()) {
-                tapConfirmed();
+                tapConfirmed(true);
                 updatePosition(eventX, eventY, xRel, yRel);
             }
         }
@@ -452,13 +505,18 @@ public class AbsoluteTouchContext implements TouchContext {
         cancelled = true;
 
         // Cancel the timers
-        cancelLongPressTimer();
+        cancelLongPressRightClickTimer();
+        cancelLongPressHoldTimer();
 //        cancelTapDownTimer();
         cancelScaleTranslateTimer();
 
         // Raise the mouse buttons
-        if (confirmedLongPress) {
+        if (confirmedLongPressRightClick) {
             conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_RIGHT);
+        }
+        else if (confirmedLongPressHold) {
+            conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_LEFT);
+            leftButtonAlreadyUp = true;
         }
         else if (confirmedTap) {
             if (!leftButtonAlreadyUp) {
@@ -482,7 +540,8 @@ public class AbsoluteTouchContext implements TouchContext {
         }
 
         if (pointerCount >= 2) {
-            cancelLongPressTimer();
+            cancelLongPressRightClickTimer();
+            cancelLongPressHoldTimer();
         }
     }
 }

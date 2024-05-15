@@ -28,6 +28,7 @@ public class RelativeTouchContext implements TouchContext {
     private boolean cancelled;
     private boolean confirmedMove;
     private boolean confirmedDrag;
+    private boolean confirmedHold;
     private Supplier<Boolean> confirmedScaleTranslateGetter;
     private Consumer<Boolean> confirmedScaleTranslateSetter;
     private boolean confirmedScroll;
@@ -82,6 +83,29 @@ public class RelativeTouchContext implements TouchContext {
             byte mouseButtonIndex = getMouseButtonIndex();
             if (mouseButtonIndex != (byte)0xFF) {
                 lastDragMouseIndex = mouseButtonIndex;
+                conn.sendMouseButtonDown(mouseButtonIndex);
+            }
+        }
+    };
+
+    private final Runnable holdTimerRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (confirmedMove) {
+                return;
+            }
+
+            if (!(
+                    (actionIndex == 0 && maxPointerCountInGesture == 1 && pointerCount == 1)
+                    // conflicts with scaleTranslate
+//                    || (actionIndex == 1 && maxPointerCountInGesture == 2 && pointerCount == 2)
+            )) {
+                return;
+            }
+
+            confirmedHold = true;
+            byte mouseButtonIndex = getMouseButtonIndex();
+            if (mouseButtonIndex != (byte)0xFF) {
                 conn.sendMouseButtonDown(mouseButtonIndex);
             }
         }
@@ -228,7 +252,7 @@ public class RelativeTouchContext implements TouchContext {
 
     private boolean isTap(long eventTime, byte mouseButtonIndex)
     {
-        if (confirmedDrag || confirmedMove || confirmedScroll || confirmedScaleTranslateGetter.get()) {
+        if (confirmedDrag || confirmedHold || confirmedMove || confirmedScroll || confirmedScaleTranslateGetter.get()) {
 //            Log.i("relT", "[" + actionIndex + "/" + pointerCount + "/" + System.identityHashCode(this)  + "] " + "isTap: false 1");
             return false;
         }
@@ -278,7 +302,7 @@ public class RelativeTouchContext implements TouchContext {
 //            Log.i("relT", "[" + actionIndex + "/" + pointerCount + "/" + System.identityHashCode(this)  + "] " + "isNewFinger");
             maxPointerCountInGesture = pointerCount;
             originalTouchTime = eventTime;
-            cancelled = confirmedDrag = confirmedMove = confirmedScroll = false;
+            cancelled = confirmedDrag = confirmedHold = confirmedMove = confirmedScroll = false;
             confirmedScaleTranslateSetter.accept(false);
             distanceMoved = 0;
             doubleFingerInitialSpacingSetter.accept(100.0d);
@@ -287,6 +311,7 @@ public class RelativeTouchContext implements TouchContext {
             if (actionIndex == 0) {
                 // Start the timer for engaging a drag
                 startDragTimer();
+                startHoldTimer();
             }
 
             // track pinch/zoom gesture in actionIndex=1 (second touch point)
@@ -318,6 +343,7 @@ public class RelativeTouchContext implements TouchContext {
 
         // Cancel the drag timer
         cancelDragTimer();
+        cancelHoldTimer();
         cancelScaleTranslateTimer();
 
 //        Log.i("relT", "[" + actionIndex + "/" + pointerCount + "/" + System.identityHashCode(this)  + "] " + "touchUp");
@@ -356,6 +382,8 @@ public class RelativeTouchContext implements TouchContext {
         if (confirmedDrag) {
             // Raise the button after a drag
             conn.sendMouseButtonUp(lastDragMouseIndex);
+        } else if (confirmedHold) {
+            conn.sendMouseButtonUp(buttonIndex);
         }
         else if (isTap(eventTime, buttonIndex))
         {
@@ -381,6 +409,11 @@ public class RelativeTouchContext implements TouchContext {
         handler.postDelayed(dragTimerRunnable, DRAG_TIME_THRESHOLD);
     }
 
+    private void startHoldTimer() {
+        cancelHoldTimer();
+        handler.postDelayed(holdTimerRunnable, 650);
+    }
+
     private void startScaleTranslateTimer() {
         cancelScaleTranslateTimer();
         handler.postDelayed(scaleTranslateHoldTimerRunnable, 700);
@@ -389,6 +422,9 @@ public class RelativeTouchContext implements TouchContext {
 
     private void cancelDragTimer() {
         handler.removeCallbacks(dragTimerRunnable);
+    }
+    private void cancelHoldTimer() {
+        handler.removeCallbacks(holdTimerRunnable);
     }
 
     private void cancelScaleTranslateTimer() {
@@ -399,7 +435,7 @@ public class RelativeTouchContext implements TouchContext {
     @SuppressLint("NewApi")
     private void checkForConfirmedDoubleClickDrag(int eventX, int eventY, long eventTime, MutableBoolean distanceAdded) {
         // If we've already confirmed something, get out now
-        if (confirmedMove || confirmedDrag || confirmedScaleTranslateGetter.get()) {
+        if (confirmedMove || confirmedHold || confirmedDrag || confirmedScaleTranslateGetter.get()) {
             return;
         }
 
@@ -422,6 +458,7 @@ public class RelativeTouchContext implements TouchContext {
             byte mouseButtonIndex = getMouseButtonIndex();
             if (mouseButtonIndex != (byte)0xFF) {
                 cancelDragTimer();
+                cancelHoldTimer();
                 // Log.i("relT", "[" + actionIndex + "/" + pointerCount + "/" + System.identityHashCode(this)  + "] " + "isDrag");
                 confirmedDrag = true;
                 lastDragMouseIndex = mouseButtonIndex;
@@ -432,7 +469,7 @@ public class RelativeTouchContext implements TouchContext {
 
     private void addDistanceLazyOnceIfNeeded(int eventX, int eventY, MutableBoolean distanceAdded) {
         // If we've already confirmed something, get out now
-        if (confirmedMove || confirmedDrag || confirmedScaleTranslateGetter.get()) {
+        if (confirmedMove || confirmedDrag || confirmedHold || confirmedScaleTranslateGetter.get()) {
             return;
         }
         if (!distanceAdded.value) {
@@ -443,7 +480,7 @@ public class RelativeTouchContext implements TouchContext {
 
     private void checkForConfirmedMove(int eventX, int eventY, MutableBoolean distanceAdded) {
         // If we've already confirmed something, get out now
-        if (confirmedMove || confirmedDrag || confirmedScaleTranslateGetter.get()) {
+        if (confirmedMove || confirmedDrag || confirmedHold || confirmedScaleTranslateGetter.get()) {
             return;
         }
 
@@ -452,6 +489,7 @@ public class RelativeTouchContext implements TouchContext {
 //            Log.i("relT", "confirmedMove 1");
             confirmedMove = true;
             cancelDragTimer();
+            cancelHoldTimer();
             return;
         }
 
@@ -461,6 +499,7 @@ public class RelativeTouchContext implements TouchContext {
 //            Log.i("relT", "confirmedMove 2");
             confirmedMove = true;
             cancelDragTimer();
+            cancelHoldTimer();
             return;
         }
     }
@@ -481,7 +520,7 @@ public class RelativeTouchContext implements TouchContext {
         if (actionIndex != 1 || maxPointerCountInGesture != 2 || !confirmedMove || !confirmedScroll) {
             return;
         }
-        if (confirmedDrag || confirmedScaleTranslateGetter.get()) {
+        if (confirmedDrag || confirmedHold || confirmedScaleTranslateGetter.get()) {
             return;
         }
         if (isPinchZoomTimedOut) {
@@ -602,11 +641,18 @@ public class RelativeTouchContext implements TouchContext {
 
         // Cancel the drag timer
         cancelDragTimer();
+        cancelHoldTimer();
         cancelScaleTranslateTimer();
 
         // If it was a confirmed drag, we'll need to raise the button now
         if (confirmedDrag) {
             conn.sendMouseButtonUp(lastDragMouseIndex);
+        }
+        if (confirmedHold) {
+            byte mi = getMouseButtonIndex();
+            if (mi != (byte)0xFF) {
+                conn.sendMouseButtonUp(mi);
+            }
         }
     }
 
