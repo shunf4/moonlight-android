@@ -5,7 +5,6 @@ import android.annotation.TargetApi;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
 import android.util.MutableBoolean;
 import android.util.Pair;
 import android.view.View;
@@ -48,6 +47,9 @@ public class RelativeTouchContext implements TouchContext {
     private final int actionIndex;
     private final int referenceWidth;
     private final int referenceHeight;
+    private final int outerScreenWidth;
+    private final int outerScreenHeight;
+    private final int edgeSingleFingerScrollWidth;
     private final View targetView;
     private final PreferenceConfiguration prefConfig;
     private final Handler handler;
@@ -188,6 +190,8 @@ public class RelativeTouchContext implements TouchContext {
     public RelativeTouchContext(NvConnection conn, int actionIndex,
                                 int referenceWidth, int referenceHeight,
                                 View view, PreferenceConfiguration prefConfig,
+                                int outerScreenWidth, int outerScreenHeight,
+                                int edgeSingleFingerScrollWidth,
                                 Supplier<Long> lastLeftMouseTapTimeGetter,
                                 Consumer<Long> lastLeftMouseTapTimeSetter,
                                 Function<Integer, Pair<Integer, Integer>> otherTouchPosGetter,
@@ -209,6 +213,10 @@ public class RelativeTouchContext implements TouchContext {
         this.targetView = view;
         this.prefConfig = prefConfig;
         this.handler = new Handler(Looper.getMainLooper());
+
+        this.outerScreenWidth = outerScreenWidth;
+        this.outerScreenHeight = outerScreenHeight;
+        this.edgeSingleFingerScrollWidth = edgeSingleFingerScrollWidth;
 
         this.lastLeftMouseTapTimeGetter = lastLeftMouseTapTimeGetter;
         this.lastLeftMouseTapTimeSetter = lastLeftMouseTapTimeSetter;
@@ -504,16 +512,47 @@ public class RelativeTouchContext implements TouchContext {
         }
     }
 
-    private void checkForConfirmedScroll() {
+    private void checkForConfirmedDoubleFingerScroll() {
         // Enter scrolling mode if we've already left the tap zone
         // and we have 2 fingers on screen. Leave scroll mode if
         // we no longer have 2 fingers on screen
         boolean origConfirmedScroll = confirmedScroll;
-        confirmedScroll = (actionIndex == 1 && pointerCount == 2 && confirmedMove && !confirmedScaleTranslateGetter.get());
+        confirmedScroll = confirmedScroll || ((actionIndex == 1 && pointerCount == 2 && maxPointerCountInGesture == 2 && confirmedMove && !confirmedScaleTranslateGetter.get()));
+
+        if (confirmedScroll) {
+            cancelHoldTimer();
+            cancelDragTimer();
+        }
+
         if (confirmedScroll && !origConfirmedScroll) {
 //            Log.i("relT", "confirmedScroll");
         }
+    }
 
+    private boolean decideIsSingleFingerScrollFromTouchX(int originalTouchX) {
+        if (outerScreenWidth <= 0) {
+            return false;
+        }
+        if (edgeSingleFingerScrollWidth < 0) {
+            return originalTouchX + edgeSingleFingerScrollWidth < 0;
+        }
+        if (edgeSingleFingerScrollWidth >= 10000) {
+            int x = edgeSingleFingerScrollWidth % 10000;
+            return originalTouchX - x < 0 || originalTouchX + x > outerScreenWidth;
+        }
+         return originalTouchX + edgeSingleFingerScrollWidth > outerScreenWidth;
+    }
+
+    private void checkForConfirmedOneFingerScroll() {
+        boolean origConfirmedScroll = confirmedScroll;
+        confirmedScroll = confirmedScroll || ((actionIndex == 0 && pointerCount == 1 && maxPointerCountInGesture == 1 && decideIsSingleFingerScrollFromTouchX(originalTouchX) && confirmedMove && !confirmedScaleTranslateGetter.get()));
+        if (confirmedScroll) {
+            cancelHoldTimer();
+            cancelDragTimer();
+        }
+        if (confirmedScroll && !origConfirmedScroll) {
+//            Log.i("relT", "confirmedScroll");
+        }
     }
 
     private void checkForConfirmedScaleTranslate(int eventX, int eventY) {
@@ -555,7 +594,8 @@ public class RelativeTouchContext implements TouchContext {
         {
             checkForConfirmedDoubleClickDrag(eventX, eventY, eventTime, distanceAdded);
             checkForConfirmedMove(eventX, eventY, distanceAdded);
-            checkForConfirmedScroll();
+            checkForConfirmedOneFingerScroll();
+            checkForConfirmedDoubleFingerScroll();
             checkForConfirmedScaleTranslate(eventX, eventY);
 
             int deltaX = eventX - lastTouchX;
@@ -576,6 +616,8 @@ public class RelativeTouchContext implements TouchContext {
             if (actionIndex == 0) {
                 if (pointerCount == 2) {
 
+                } else if (confirmedScroll) {
+                    conn.sendMouseHighResScroll((short)(deltaY * SCROLL_SPEED_FACTOR));
                 } else {
                     if (prefConfig.absoluteMouseMode) {
                         conn.sendMouseMoveAsMousePosition(

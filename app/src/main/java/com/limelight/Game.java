@@ -60,6 +60,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Pair;
 import android.util.Rational;
@@ -74,6 +75,7 @@ import android.view.View;
 import android.view.View.OnGenericMotionListener;
 import android.view.View.OnSystemUiVisibilityChangeListener;
 import android.view.View.OnTouchListener;
+import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.animation.Animation;
@@ -148,8 +150,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private boolean waitingForAllModifiersUp = false;
     private int specialKeyCode = KeyEvent.KEYCODE_UNKNOWN;
     private StreamView streamView;
+    private View backgroundTouchView;
     private long lastAbsTouchUpTime = 0;
     private long lastAbsTouchDownTime = 0;
+    private long lastThreeLeftRightSwipe = 0;
+    private long lastThreeDownSwipe = 0;
     private float lastAbsTouchUpX, lastAbsTouchUpY;
     private float lastAbsTouchDownX, lastAbsTouchDownY;
 
@@ -267,8 +272,14 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         // to work on areas outside of the StreamView itself. We use a separate View
         // for this rather than just handling it at the Activity level, because that
         // allows proper touch splitting, which the OSC relies upon.
-        View backgroundTouchView = findViewById(R.id.backgroundTouchView);
+        backgroundTouchView = findViewById(R.id.backgroundTouchView);
         backgroundTouchView.setOnTouchListener(this);
+        backgroundTouchView.getRootView().getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                initTouchContexts();
+            }
+        });
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             // Request unbuffered input event dispatching for all input classes we handle here.
@@ -784,9 +795,15 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             streamView.setScaleY(currScale);
         };
 
+        DisplayMetrics screen = getResources().getDisplayMetrics();
+
         for (int i = 0; i < touchContextMap.length; i++) {
             if (!prefConfig.touchscreenTrackpad) {
                 touchContextMap[i] = new AbsoluteTouchContext(conn, i, streamView,
+                        backgroundTouchView.getWidth(),
+                        backgroundTouchView.getHeight(),
+                        prefConfig.modeLongPressNeededToDrag,
+                        prefConfig.edgeSingleFingerScrollWidth,
                         (otherTouchIndex) -> {
                             TouchContext otherTouchContext = touchContextMap[otherTouchIndex];
                             return Pair.create(otherTouchContext.getLastTouchX(), otherTouchContext.getLastTouchY());
@@ -805,7 +822,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             else {
                 touchContextMap[i] = new RelativeTouchContext(conn, i,
                         REFERENCE_HORIZ_RES, REFERENCE_VERT_RES,
-                        streamView, prefConfig,
+                        streamView,
+                        prefConfig,
+                        backgroundTouchView.getWidth(),
+                        backgroundTouchView.getHeight(),
+                        prefConfig.edgeSingleFingerScrollWidth,
                         () -> lastLeftMouseTapTime,
                         x -> { lastLeftMouseTapTime = x; },
                         (otherTouchIndex) -> {
@@ -2161,14 +2182,63 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                                 toggleKeyboard();
                             } else if (threeFingerUpAvgY - threeFingerDownAvgY > 170.0f) {
                                 prefConfig.touchscreenTrackpad = !prefConfig.touchscreenTrackpad;
+                                if (event.getEventTime() - lastThreeDownSwipe < 1300) {
+                                    lastThreeDownSwipe = 0;
+                                    prefConfig.modeLongPressNeededToDrag = !prefConfig.modeLongPressNeededToDrag;
+                                    Toast.makeText(this, "Switched to " + (prefConfig.modeLongPressNeededToDrag ? "not-longPressNeededToDrag" : "longPressNeededToDrag"), Toast.LENGTH_SHORT).show();
+                                } else {
+                                    lastThreeDownSwipe = event.getEventTime();
+                                    Toast.makeText(this, "Switched to " + (prefConfig.touchscreenTrackpad ? "trackpad" : "direct mouse control"), Toast.LENGTH_SHORT).show();
+                                }
                                 initTouchContexts();
-                                Toast.makeText(this, "Switched to " + (prefConfig.touchscreenTrackpad ? "trackpad" : "direct mouse control"), Toast.LENGTH_SHORT).show();
+                                lastThreeLeftRightSwipe = 0;
                             } else if (threeFingerUpAvgX - threeFingerDownAvgX < -170.0f) {
                                 conn.sendMousePosition((short) (streamView.getWidth() / 2), (short) (streamView.getHeight() / 2), (short) streamView.getWidth(), (short) streamView.getHeight());
                                 Toast.makeText(this, "Reset mouse position", Toast.LENGTH_SHORT).show();
+                                if (event.getEventTime() - lastThreeLeftRightSwipe < 1300) {
+                                    lastThreeLeftRightSwipe = 0;
+                                    getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                                    getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
+                                    getWindow().getDecorView().getRootView().setSystemUiVisibility(
+                                            View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                                            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                                            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                                            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                                            View.SYSTEM_UI_FLAG_FULLSCREEN
+                                    );
+                                    getWindow().getDecorView().setSystemUiVisibility(
+                                            View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                                                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                                                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                                                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                                                    View.SYSTEM_UI_FLAG_FULLSCREEN
+                                    );
+
+                                } else {
+                                    lastThreeLeftRightSwipe = event.getEventTime();
+                                }
+                                lastThreeDownSwipe = 0;
                             } else if (threeFingerUpAvgX - threeFingerDownAvgX > 170.0f) {
                                 conn.sendMousePosition((short) (streamView.getWidth() / 2), (short) (streamView.getHeight() / 2), (short) streamView.getWidth(), (short) streamView.getHeight());
                                 Toast.makeText(this, "Reset mouse position", Toast.LENGTH_SHORT).show();
+                                if (event.getEventTime() - lastThreeLeftRightSwipe < 1300) {
+                                    lastThreeLeftRightSwipe = 0;
+                                    getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                                    getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
+                                    getWindow().getDecorView().getRootView().setSystemUiVisibility(
+                                            View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                                                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                                                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                    );
+                                    getWindow().getDecorView().setSystemUiVisibility(
+                                            View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                                                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                                                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                    );
+                                } else {
+                                    lastThreeLeftRightSwipe = event.getEventTime();
+                                }
+                                lastThreeDownSwipe = 0;
                             }
                             threeFingerDownAvgX = Float.NaN;
                             return true;

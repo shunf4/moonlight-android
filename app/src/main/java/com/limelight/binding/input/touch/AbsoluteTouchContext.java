@@ -49,6 +49,7 @@ public class AbsoluteTouchContext implements TouchContext {
     private boolean confirmedLongPressRightClick;
     private boolean confirmedLongPressHold;
     private boolean confirmedTap;
+    private final boolean modeLongPressNeededToDrag;
 
     private final Runnable longPressRightClickRunnable = new Runnable() {
         @Override
@@ -85,7 +86,7 @@ public class AbsoluteTouchContext implements TouchContext {
 
             if (confirmedLongPressRightClick) {
                 confirmedLongPressRightClick = false;
-                conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_RIGHT);
+//                conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_RIGHT);
             }
 
             if (confirmedTap) {
@@ -143,6 +144,11 @@ public class AbsoluteTouchContext implements TouchContext {
     private final View targetView;
     private final Handler handler;
 
+    private final int outerScreenWidth;
+    private final int outerScreenHeight;
+
+    private final int edgeSingleFingerScrollWidth;
+
     private boolean leftButtonAlreadyUp;
 
     private final Runnable leftButtonUpRunnable = new Runnable() {
@@ -163,6 +169,9 @@ public class AbsoluteTouchContext implements TouchContext {
     private static final int TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD = 20;
 
     public AbsoluteTouchContext(NvConnection conn, int actionIndex, View view,
+                                int outerScreenWidth, int outerScreenHeight,
+                                boolean modeLongPressNeededToDrag,
+                                int edgeSingleFingerScrollWidth,
                                 Function<Integer, Pair<Integer, Integer>> otherTouchPosGetter,
                                 ScaleTransformCallback scaleTransformCallback,
                                 Supplier<Boolean> confirmedScaleTranslateGetter,
@@ -179,6 +188,12 @@ public class AbsoluteTouchContext implements TouchContext {
         this.actionIndex = actionIndex;
         this.targetView = view;
         this.handler = new Handler(Looper.getMainLooper());
+
+        this.outerScreenWidth = outerScreenWidth;
+        this.outerScreenHeight = outerScreenHeight;
+
+        this.modeLongPressNeededToDrag = modeLongPressNeededToDrag;
+        this.edgeSingleFingerScrollWidth = edgeSingleFingerScrollWidth;
 
         this.otherTouchPosGetter = otherTouchPosGetter;
         this.scaleTransformCallback = scaleTransformCallback;
@@ -308,6 +323,14 @@ public class AbsoluteTouchContext implements TouchContext {
             return;
         }
 
+        if ((actionIndex == 0 && pointerCount == 1) && maxPointerCountInGesture == 1 && confirmedScaleTranslateGetter.get()) {
+            int frameTranslateX = eventX - lastTouchDownX;
+            int frameTranslateY = eventY - lastTouchDownY;
+            scaleTransformCallback.report(frameTranslateX, frameTranslateY, 1.0, true);
+            cancelTouch();
+            return;
+        }
+
         if (actionIndex == 0) {
             // Cancel the timers
             cancelLongPressRightClickTimer();
@@ -392,13 +415,20 @@ public class AbsoluteTouchContext implements TouchContext {
         confirmedTap = true;
 //        cancelTapDownTimer();
 
+        boolean shouldUpdatePosition = false;
         if (optimizeForDoubleClick) {
             // Left button down at original position
             if (lastTouchDownTime - lastTouchUpTime > DOUBLE_TAP_TIME_THRESHOLD ||
                     distanceExceeds(lastTouchDownX - lastTouchUpX, lastTouchDownY - lastTouchUpY, DOUBLE_TAP_DISTANCE_THRESHOLD)) {
                 // Don't reposition for finger down events within the deadzone. This makes double-clicking easier.
-                updatePosition(lastTouchDownX, lastTouchDownY, lastTouchDownXRel, lastTouchDownYRel);
+                shouldUpdatePosition = true;
             }
+        } else {
+            shouldUpdatePosition = true;
+        }
+
+        if (shouldUpdatePosition) {
+            updatePosition(lastTouchDownX, lastTouchDownY, lastTouchDownXRel, lastTouchDownYRel);
         }
 
         conn.sendMouseButtonDown(MouseButtonPacket.BUTTON_LEFT);
@@ -413,7 +443,7 @@ public class AbsoluteTouchContext implements TouchContext {
         conn.sendMouseButtonDown(MouseButtonPacket.BUTTON_RIGHT);
     }
 
-    private void checkForConfirmedScaleTranslate(int eventX, int eventY) {
+    private void checkForConfirmedDoubleFingerScaleTranslate(int eventX, int eventY) {
         if (actionIndex != 1 || maxPointerCountInGesture != 2) {
             return;
         }
@@ -436,6 +466,20 @@ public class AbsoluteTouchContext implements TouchContext {
         }
     }
 
+    private boolean decideIsSingleFingerScrollFromTouchX(int originalTouchX) {
+        if (outerScreenWidth <= 0) {
+            return false;
+        }
+        if (edgeSingleFingerScrollWidth < 0) {
+            return originalTouchX + edgeSingleFingerScrollWidth < 0;
+        }
+        if (edgeSingleFingerScrollWidth >= 10000) {
+            int x = edgeSingleFingerScrollWidth % 10000;
+            return originalTouchX - x < 0 || originalTouchX + x > outerScreenWidth;
+        }
+        return originalTouchX + edgeSingleFingerScrollWidth > outerScreenWidth;
+    }
+
     @Override
     public boolean touchMoveEvent(int eventX, int eventY, int xRel, int yRel, long eventTime)
     {
@@ -450,14 +494,33 @@ public class AbsoluteTouchContext implements TouchContext {
                 cancelLongPressHoldTimer();
             }
 
+            if (hasEverScrolled || ((!confirmedTap
+                    && distanceExceeds(eventX - lastTouchDownX, eventY - lastTouchDownY, TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD)
+                    && outerScreenWidth != 0 && decideIsSingleFingerScrollFromTouchX(lastTouchDownX))
+                    && maxPointerCountInGesture == 1 && !confirmedScaleTranslateGetter.get())) {
+                hasEverScrolled = true;
+                conn.sendMouseHighResScroll((short) ((eventY - lastTouchLocationY) * SCROLL_SPEED_FACTOR));
+            }
+
+            if (modeLongPressNeededToDrag) {
+                if (!hasEverScrolled && !confirmedTap && distanceExceeds(eventX - lastTouchDownX, eventY - lastTouchDownY, TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD) && maxPointerCountInGesture == 1 && !confirmedScaleTranslateGetter.get()) {
+                    confirmedScaleTranslateSetter.accept(true);
+                    cancelScaleTranslateTimer();
+                }
+            }
+
+            if (!hasEverScrolled && confirmedScaleTranslateGetter.get() && maxPointerCountInGesture == 1) {
+                scaleTransformCallback.report(eventX - lastTouchDownX, eventY - lastTouchDownY, 1.0, false);
+            }
+
             // Ignore motion within the deadzone period after touch down
-            if ((confirmedTap || distanceExceeds(eventX - lastTouchDownX, eventY - lastTouchDownY, TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD)) && maxPointerCountInGesture == 1 && !confirmedScaleTranslateGetter.get()) {
+            if (!hasEverScrolled && (confirmedTap || distanceExceeds(eventX - lastTouchDownX, eventY - lastTouchDownY, TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD)) && maxPointerCountInGesture == 1 && !confirmedScaleTranslateGetter.get()) {
                 tapConfirmed(true);
                 updatePosition(eventX, eventY, xRel, yRel);
             }
         }
         else if (actionIndex == 1) {
-            checkForConfirmedScaleTranslate(eventX, eventY);
+            checkForConfirmedDoubleFingerScaleTranslate(eventX, eventY);
             if (confirmedScaleTranslateGetter.get()) {
                 if (pointerCount == 2 && maxPointerCountInGesture == 2) {
                     Pair<Integer, Integer> touch0Pos = otherTouchPosGetter.apply(0);
