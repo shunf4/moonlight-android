@@ -57,6 +57,7 @@ public class RelativeTouchContext implements TouchContext {
     private final Supplier<Long> lastLeftMouseTapTimeGetter;
     private final Consumer<Long> lastLeftMouseTapTimeSetter;
     private final boolean shouldDoubleClickDragTransform;
+    private final boolean shouldRelativeLongPressRightClick;
 
 
     private final Function<Integer, Pair<Integer, Integer>> otherTouchPosGetter;
@@ -66,7 +67,7 @@ public class RelativeTouchContext implements TouchContext {
     private final Runnable dragTimerRunnable = new Runnable() {
         @Override
         public void run() {
-            // shunf4: no I don't want this. No touchpad will accept a long-tap-then-move as a drag.
+            // shunf4: using holdTimerRunnable instead
             if (true) {
                 return;
             }
@@ -195,6 +196,7 @@ public class RelativeTouchContext implements TouchContext {
                                 int outerScreenWidth, int outerScreenHeight,
                                 int edgeSingleFingerScrollWidth,
                                 boolean isDoubleClickDragTransform,
+                                boolean shouldRelativeLongPressRightClick,
                                 Supplier<Long> lastLeftMouseTapTimeGetter,
                                 Consumer<Long> lastLeftMouseTapTimeSetter,
                                 Function<Integer, Pair<Integer, Integer>> otherTouchPosGetter,
@@ -221,6 +223,7 @@ public class RelativeTouchContext implements TouchContext {
         this.outerScreenHeight = outerScreenHeight;
         this.edgeSingleFingerScrollWidth = edgeSingleFingerScrollWidth;
         this.shouldDoubleClickDragTransform = isDoubleClickDragTransform;
+        this.shouldRelativeLongPressRightClick = shouldRelativeLongPressRightClick;
 
         this.lastLeftMouseTapTimeGetter = lastLeftMouseTapTimeGetter;
         this.lastLeftMouseTapTimeSetter = lastLeftMouseTapTimeSetter;
@@ -284,6 +287,20 @@ public class RelativeTouchContext implements TouchContext {
         long timeDelta = eventTime - originalTouchTime;
 //        Log.i("relT", "[" + actionIndex + "/" + pointerCount + "/" + System.identityHashCode(this)  + "] " + "isTap: (timeDelta <= TAP_TIME_THRESHOLD) = " + (timeDelta <= TAP_TIME_THRESHOLD));
         return isWithinTapBounds(lastTouchX, lastTouchY) && timeDelta <= TAP_TIME_THRESHOLD;
+    }
+
+    private boolean isRightTap(long eventTime)
+    {
+        if (confirmedDrag || confirmedHold || confirmedMove || confirmedScroll || confirmedScaleTranslateGetter.get() || confirmedDoubleClickDragTransform) {
+            return false;
+        }
+
+        if (!(actionIndex == 0 && pointerCount == 1 && maxPointerCountInGesture == 1)) {
+            return false;
+        }
+
+        long timeDelta = eventTime - originalTouchTime;
+        return isWithinTapBounds(lastTouchX, lastTouchY) && timeDelta >= 368 && timeDelta < 900;
     }
 
     private byte getMouseButtonIndex()
@@ -400,6 +417,13 @@ public class RelativeTouchContext implements TouchContext {
         } else if (confirmedHold) {
             conn.sendMouseButtonUp(buttonIndex);
         }
+        else if (shouldRelativeLongPressRightClick && isRightTap(eventTime)) {
+            buttonIndex = MouseButtonPacket.BUTTON_RIGHT;
+            conn.sendMouseButtonDown(buttonIndex);
+            Runnable buttonUpRunnable = buttonUpRunnables[buttonIndex - 1];
+            handler.removeCallbacks(buttonUpRunnable);
+            handler.postDelayed(buttonUpRunnable, 100);
+        }
         else if (isTap(eventTime, buttonIndex))
         {
 //            Log.i("relT", "[" + actionIndex + "/" + pointerCount + "/" + System.identityHashCode(this)  + "] " + "isTap, buttonIndex = " + buttonIndex);
@@ -426,7 +450,7 @@ public class RelativeTouchContext implements TouchContext {
 
     private void startHoldTimer() {
         cancelHoldTimer();
-        handler.postDelayed(holdTimerRunnable, 650);
+        handler.postDelayed(holdTimerRunnable, shouldRelativeLongPressRightClick ? 900 : 650);
     }
 
     private void startScaleTranslateTimer() {

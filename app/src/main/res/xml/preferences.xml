@@ -144,6 +144,11 @@
             android:title="should_double_click_drag_transform"
             android:summary="should_double_click_drag_transform"
             android:defaultValue="false" />
+        <CheckBoxPreference
+            android:key="should_relative_long_press_right_click"
+            android:title="should_relative_long_press_right_click"
+            android:summary="should_relative_long_press_right_click"
+            android:defaultValue="true" />
         <EditTextPreference
             android:key="edge_single_finger_scroll_width"
             android:title="edge_single_finger_scroll_width"

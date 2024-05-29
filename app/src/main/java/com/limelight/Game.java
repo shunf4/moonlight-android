@@ -829,6 +829,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         backgroundTouchView.getHeight(),
                         prefConfig.edgeSingleFingerScrollWidth,
                         prefConfig.shouldDoubleClickDragTransform,
+                        prefConfig.shouldRelativeLongPressRightClick,
                         () -> lastLeftMouseTapTime,
                         x -> { lastLeftMouseTapTime = x; },
                         (otherTouchIndex) -> {
@@ -2199,7 +2200,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                                 }
                                 initTouchContexts();
                                 lastThreeLeftRightSwipe = 0;
-                            } else if (threeFingerUpAvgX - threeFingerDownAvgX < -170.0f) {||
+                            } else if (threeFingerUpAvgX - threeFingerDownAvgX < -170.0f) {
                                 conn.sendMousePosition((short) (streamView.getWidth() / 2), (short) (streamView.getHeight() / 2), (short) streamView.getWidth(), (short) streamView.getHeight());
                                 Toast.makeText(this, "Reset mouse position", Toast.LENGTH_SHORT).show();
                                 if (event.getEventTime() - lastThreeLeftRightSwipe < 1300) {
