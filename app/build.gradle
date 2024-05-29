@@ -1,5 +1,9 @@
 apply plugin: 'com.android.application'
 
+if (file("sign.gradle").exists()) {
+    apply from: 'sign.gradle'
+}
+
 android {
     ndkVersion "21.4.7075529"
 
@@ -125,6 +129,32 @@ android {
 
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+
+
+            if (file("sign.gradle").exists()) {
+                // Local environment
+                signingConfig signingConfigs.release
+                // debuggable true
+
+                /* sign.gradle is like:
+android {
+    signingConfigs {
+        release {
+            keyAlias 'aliasxxx'
+            keyPassword 'passwordxxx'
+            storeFile file('../xxx.jks')
+            storePassword 'passwordxxx'
+        }
+    }
+}
+GitHub config is like:
+SIGNING_KEY:
+`openssl base64 < some_signing_key.jks | tr -d '\n'`
+ALIAS:
+KEY_STORE_PASSWORD:
+KEY_PASSWORD:
+*/
+            }
         }
     }
 

@@ -49,6 +49,7 @@ public class AbsoluteTouchContext implements TouchContext {
     private boolean confirmedLongPressRightClick;
     private boolean confirmedLongPressHold;
     private boolean confirmedTap;
+    private boolean shouldDoubleClickDragTransform;
     private final boolean modeLongPressNeededToDrag;
 
     private final Runnable longPressRightClickRunnable = new Runnable() {
@@ -172,6 +173,7 @@ public class AbsoluteTouchContext implements TouchContext {
                                 int outerScreenWidth, int outerScreenHeight,
                                 boolean modeLongPressNeededToDrag,
                                 int edgeSingleFingerScrollWidth,
+                                boolean shouldDoubleClickDragTransform,
                                 Function<Integer, Pair<Integer, Integer>> otherTouchPosGetter,
                                 ScaleTransformCallback scaleTransformCallback,
                                 Supplier<Boolean> confirmedScaleTranslateGetter,
@@ -194,6 +196,7 @@ public class AbsoluteTouchContext implements TouchContext {
 
         this.modeLongPressNeededToDrag = modeLongPressNeededToDrag;
         this.edgeSingleFingerScrollWidth = edgeSingleFingerScrollWidth;
+        this.shouldDoubleClickDragTransform = shouldDoubleClickDragTransform;
 
         this.otherTouchPosGetter = otherTouchPosGetter;
         this.scaleTransformCallback = scaleTransformCallback;
@@ -499,13 +502,24 @@ public class AbsoluteTouchContext implements TouchContext {
                     && outerScreenWidth != 0 && decideIsSingleFingerScrollFromTouchX(lastTouchDownX))
                     && maxPointerCountInGesture == 1 && !confirmedScaleTranslateGetter.get())) {
                 hasEverScrolled = true;
-                conn.sendMouseHighResScroll((short) ((eventY - lastTouchLocationY) * SCROLL_SPEED_FACTOR));
+                conn.sendMouseHighResScroll((short) -((eventY - lastTouchLocationY) * SCROLL_SPEED_FACTOR));
             }
 
             if (modeLongPressNeededToDrag) {
                 if (!hasEverScrolled && !confirmedTap && distanceExceeds(eventX - lastTouchDownX, eventY - lastTouchDownY, TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD) && maxPointerCountInGesture == 1 && !confirmedScaleTranslateGetter.get()) {
                     confirmedScaleTranslateSetter.accept(true);
                     cancelScaleTranslateTimer();
+                }
+            }
+
+            if (shouldDoubleClickDragTransform) {
+                if (!confirmedScaleTranslateGetter.get() && !hasEverScrolled && !confirmedTap && distanceExceeds(eventX - lastTouchDownX, eventY - lastTouchDownY, TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD) && maxPointerCountInGesture == 1 && !confirmedScaleTranslateGetter.get()) {
+                    if (lastTouchDownTime - lastTouchUpTime > DOUBLE_TAP_TIME_THRESHOLD ||
+                            distanceExceeds(lastTouchDownX - lastTouchUpX, lastTouchDownY - lastTouchUpY, DOUBLE_TAP_DISTANCE_THRESHOLD)) {
+                    } else {
+                        confirmedScaleTranslateSetter.accept(true);
+                        cancelScaleTranslateTimer();
+                    }
                 }
             }
 

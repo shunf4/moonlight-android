@@ -59,6 +59,7 @@ public class PreferenceConfiguration {
     private static final String FLIP_FACE_BUTTONS_PREF_STRING = "checkbox_flip_face_buttons";
     private static final String TOUCHSCREEN_TRACKPAD_PREF_STRING = "checkbox_touchscreen_trackpad";
     private static final String MODE_LONG_PRESS_NEEDED_TO_DRAG_PREF_STRING = "mode_long_press_needed_to_drag";
+    private static final String SHOULD_DOUBLE_CLICK_DRAG_TRANSFORM_PREF_STRING = "should_double_click_drag_transform";
     private static final String EDGE_SINGLE_FINGER_SCROLL_WIDTH_PREF_STRING = "edge_single_finger_scroll_width";
     private static final String LATENCY_TOAST_PREF_STRING = "checkbox_enable_post_stream_toast";
     private static final String FRAME_PACING_PREF_STRING = "frame_pacing";
@@ -99,6 +100,7 @@ public class PreferenceConfiguration {
     private static final boolean DEFAULT_FLIP_FACE_BUTTONS = false;
     private static final boolean DEFAULT_TOUCHSCREEN_TRACKPAD = true;
     private static final boolean DEFAULT_MODE_LONG_PRESS_NEEDED_TO_DRAG = false;
+    private static final boolean DEFAULT_SHOULD_DOUBLE_CLICK_DRAG_TRANSFORM = false;
     private static final String DEFAULT_EDGE_SINGLE_FINGER_SCROLL_WIDTH = "150";
     private static final String DEFAULT_AUDIO_CONFIG = "2"; // Stereo
     private static final boolean DEFAULT_LATENCY_TOAST = false;
@@ -148,6 +150,7 @@ public class PreferenceConfiguration {
     public int vibrateFallbackToDeviceStrength;
     public boolean touchscreenTrackpad;
     public boolean modeLongPressNeededToDrag;
+    public boolean shouldDoubleClickDragTransform;
     public int edgeSingleFingerScrollWidth;
     public MoonBridge.AudioConfiguration audioConfiguration;
     public int framePacing;
@@ -596,6 +599,7 @@ public class PreferenceConfiguration {
         config.flipFaceButtons = prefs.getBoolean(FLIP_FACE_BUTTONS_PREF_STRING, DEFAULT_FLIP_FACE_BUTTONS);
         config.touchscreenTrackpad = prefs.getBoolean(TOUCHSCREEN_TRACKPAD_PREF_STRING, DEFAULT_TOUCHSCREEN_TRACKPAD);
         config.modeLongPressNeededToDrag = prefs.getBoolean(MODE_LONG_PRESS_NEEDED_TO_DRAG_PREF_STRING, DEFAULT_MODE_LONG_PRESS_NEEDED_TO_DRAG);
+        config.shouldDoubleClickDragTransform = prefs.getBoolean(SHOULD_DOUBLE_CLICK_DRAG_TRANSFORM_PREF_STRING, DEFAULT_SHOULD_DOUBLE_CLICK_DRAG_TRANSFORM);
         config.edgeSingleFingerScrollWidth = Integer.parseInt(prefs.getString(EDGE_SINGLE_FINGER_SCROLL_WIDTH_PREF_STRING, DEFAULT_EDGE_SINGLE_FINGER_SCROLL_WIDTH));
         config.enableLatencyToast = prefs.getBoolean(LATENCY_TOAST_PREF_STRING, DEFAULT_LATENCY_TOAST);
         config.absoluteMouseMode = prefs.getBoolean(ABSOLUTE_MOUSE_MODE_PREF_STRING, DEFAULT_ABSOLUTE_MOUSE_MODE);

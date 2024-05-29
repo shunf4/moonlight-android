@@ -804,6 +804,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         backgroundTouchView.getHeight(),
                         prefConfig.modeLongPressNeededToDrag,
                         prefConfig.edgeSingleFingerScrollWidth,
+                        prefConfig.shouldDoubleClickDragTransform,
                         (otherTouchIndex) -> {
                             TouchContext otherTouchContext = touchContextMap[otherTouchIndex];
                             return Pair.create(otherTouchContext.getLastTouchX(), otherTouchContext.getLastTouchY());
@@ -827,6 +828,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         backgroundTouchView.getWidth(),
                         backgroundTouchView.getHeight(),
                         prefConfig.edgeSingleFingerScrollWidth,
+                        prefConfig.shouldDoubleClickDragTransform,
                         () -> lastLeftMouseTapTime,
                         x -> { lastLeftMouseTapTime = x; },
                         (otherTouchIndex) -> {
@@ -2184,15 +2186,20 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                                 prefConfig.touchscreenTrackpad = !prefConfig.touchscreenTrackpad;
                                 if (event.getEventTime() - lastThreeDownSwipe < 1300) {
                                     lastThreeDownSwipe = 0;
-                                    prefConfig.modeLongPressNeededToDrag = !prefConfig.modeLongPressNeededToDrag;
-                                    Toast.makeText(this, "Switched to " + (prefConfig.modeLongPressNeededToDrag ? "not-longPressNeededToDrag" : "longPressNeededToDrag"), Toast.LENGTH_SHORT).show();
+                                    if (prefConfig.touchscreenTrackpad) {
+                                        prefConfig.shouldDoubleClickDragTransform = !prefConfig.shouldDoubleClickDragTransform;
+                                        Toast.makeText(this, "Switched to " + (prefConfig.shouldDoubleClickDragTransform ? "shouldDoubleClickDragTransform" : "not-shouldDoubleClickDragTransform"), Toast.LENGTH_SHORT).show();
+                                    } else {
+                                        prefConfig.modeLongPressNeededToDrag = !prefConfig.modeLongPressNeededToDrag;
+                                        Toast.makeText(this, "Switched to " + (prefConfig.modeLongPressNeededToDrag ? "longPressNeededToDrag" : "not-longPressNeededToDrag"), Toast.LENGTH_SHORT).show();
+                                    }
                                 } else {
                                     lastThreeDownSwipe = event.getEventTime();
                                     Toast.makeText(this, "Switched to " + (prefConfig.touchscreenTrackpad ? "trackpad" : "direct mouse control"), Toast.LENGTH_SHORT).show();
                                 }
                                 initTouchContexts();
                                 lastThreeLeftRightSwipe = 0;
-                            } else if (threeFingerUpAvgX - threeFingerDownAvgX < -170.0f) {
+                            } else if (threeFingerUpAvgX - threeFingerDownAvgX < -170.0f) {||
                                 conn.sendMousePosition((short) (streamView.getWidth() / 2), (short) (streamView.getHeight() / 2), (short) streamView.getWidth(), (short) streamView.getHeight());
                                 Toast.makeText(this, "Reset mouse position", Toast.LENGTH_SHORT).show();
                                 if (event.getEventTime() - lastThreeLeftRightSwipe < 1300) {

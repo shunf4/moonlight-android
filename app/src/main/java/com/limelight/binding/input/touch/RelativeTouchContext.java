@@ -31,6 +31,7 @@ public class RelativeTouchContext implements TouchContext {
     private Supplier<Boolean> confirmedScaleTranslateGetter;
     private Consumer<Boolean> confirmedScaleTranslateSetter;
     private boolean confirmedScroll;
+    private boolean confirmedDoubleClickDragTransform;
     private double distanceMoved;
     private Supplier<Double> doubleFingerInitialSpacingGetter;
     private Consumer<Double> doubleFingerInitialSpacingSetter;
@@ -55,6 +56,7 @@ public class RelativeTouchContext implements TouchContext {
     private final Handler handler;
     private final Supplier<Long> lastLeftMouseTapTimeGetter;
     private final Consumer<Long> lastLeftMouseTapTimeSetter;
+    private final boolean shouldDoubleClickDragTransform;
 
 
     private final Function<Integer, Pair<Integer, Integer>> otherTouchPosGetter;
@@ -116,7 +118,7 @@ public class RelativeTouchContext implements TouchContext {
     private final Runnable scaleTranslateHoldTimerRunnable = new Runnable() {
         @Override
         public void run() {
-            if (confirmedMove || confirmedScroll || confirmedScaleTranslateGetter.get()) {
+            if (confirmedMove || confirmedScroll || confirmedScaleTranslateGetter.get() || confirmedDoubleClickDragTransform) {
                 return;
             }
 
@@ -133,7 +135,7 @@ public class RelativeTouchContext implements TouchContext {
     private final Runnable scaleTranslatePinchZoomTimerRunnable = new Runnable() {
         @Override
         public void run() {
-            if (confirmedScaleTranslateGetter.get() || isPinchZoomTimedOut) {
+            if (confirmedScaleTranslateGetter.get() || isPinchZoomTimedOut || confirmedDoubleClickDragTransform) {
                 return;
             }
 
@@ -192,6 +194,7 @@ public class RelativeTouchContext implements TouchContext {
                                 View view, PreferenceConfiguration prefConfig,
                                 int outerScreenWidth, int outerScreenHeight,
                                 int edgeSingleFingerScrollWidth,
+                                boolean isDoubleClickDragTransform,
                                 Supplier<Long> lastLeftMouseTapTimeGetter,
                                 Consumer<Long> lastLeftMouseTapTimeSetter,
                                 Function<Integer, Pair<Integer, Integer>> otherTouchPosGetter,
@@ -217,6 +220,7 @@ public class RelativeTouchContext implements TouchContext {
         this.outerScreenWidth = outerScreenWidth;
         this.outerScreenHeight = outerScreenHeight;
         this.edgeSingleFingerScrollWidth = edgeSingleFingerScrollWidth;
+        this.shouldDoubleClickDragTransform = isDoubleClickDragTransform;
 
         this.lastLeftMouseTapTimeGetter = lastLeftMouseTapTimeGetter;
         this.lastLeftMouseTapTimeSetter = lastLeftMouseTapTimeSetter;
@@ -260,7 +264,7 @@ public class RelativeTouchContext implements TouchContext {
 
     private boolean isTap(long eventTime, byte mouseButtonIndex)
     {
-        if (confirmedDrag || confirmedHold || confirmedMove || confirmedScroll || confirmedScaleTranslateGetter.get()) {
+        if (confirmedDrag || confirmedHold || confirmedMove || confirmedScroll || confirmedScaleTranslateGetter.get() || confirmedDoubleClickDragTransform) {
 //            Log.i("relT", "[" + actionIndex + "/" + pointerCount + "/" + System.identityHashCode(this)  + "] " + "isTap: false 1");
             return false;
         }
@@ -310,7 +314,7 @@ public class RelativeTouchContext implements TouchContext {
 //            Log.i("relT", "[" + actionIndex + "/" + pointerCount + "/" + System.identityHashCode(this)  + "] " + "isNewFinger");
             maxPointerCountInGesture = pointerCount;
             originalTouchTime = eventTime;
-            cancelled = confirmedDrag = confirmedHold = confirmedMove = confirmedScroll = false;
+            cancelled = confirmedDrag = confirmedHold = confirmedMove = confirmedScroll = confirmedDoubleClickDragTransform = false;
             confirmedScaleTranslateSetter.accept(false);
             distanceMoved = 0;
             doubleFingerInitialSpacingSetter.accept(100.0d);
@@ -387,6 +391,9 @@ public class RelativeTouchContext implements TouchContext {
             return;
         }
 
+        if (confirmedDoubleClickDragTransform) {
+            scaleTransformCallback.report(eventX - originalTouchX, eventY - originalTouchY, 1.0, true);
+        }
         if (confirmedDrag) {
             // Raise the button after a drag
             conn.sendMouseButtonUp(lastDragMouseIndex);
@@ -443,7 +450,7 @@ public class RelativeTouchContext implements TouchContext {
     @SuppressLint("NewApi")
     private void checkForConfirmedDoubleClickDrag(int eventX, int eventY, long eventTime, MutableBoolean distanceAdded) {
         // If we've already confirmed something, get out now
-        if (confirmedMove || confirmedHold || confirmedDrag || confirmedScaleTranslateGetter.get()) {
+        if (confirmedMove || confirmedHold || confirmedDrag || confirmedScaleTranslateGetter.get() || confirmedDoubleClickDragTransform) {
             return;
         }
 
@@ -463,21 +470,27 @@ public class RelativeTouchContext implements TouchContext {
 //        Log.i("relT", "[" + actionIndex + "/" + pointerCount + "/" + System.identityHashCode(this)  + "] " + "(originalTouchTime - lastLeftMouseTapTimeGetter.get()) " + (originalTouchTime - lastLeftMouseTapTimeGetter.get()) + " maxPointerCountInGesture " + maxPointerCountInGesture);
 
         if (yeah && (actionIndex == 0 && pointerCount == 1 && maxPointerCountInGesture == 1 && (originalTouchTime - lastLeftMouseTapTimeGetter.get()) < 122)) {
-            byte mouseButtonIndex = getMouseButtonIndex();
-            if (mouseButtonIndex != (byte)0xFF) {
+            if (shouldDoubleClickDragTransform) {
+                confirmedDoubleClickDragTransform = true;
                 cancelDragTimer();
                 cancelHoldTimer();
-                // Log.i("relT", "[" + actionIndex + "/" + pointerCount + "/" + System.identityHashCode(this)  + "] " + "isDrag");
-                confirmedDrag = true;
-                lastDragMouseIndex = mouseButtonIndex;
-                conn.sendMouseButtonDown(mouseButtonIndex);
+            } else {
+                byte mouseButtonIndex = getMouseButtonIndex();
+                if (mouseButtonIndex != (byte) 0xFF) {
+                    cancelDragTimer();
+                    cancelHoldTimer();
+                    // Log.i("relT", "[" + actionIndex + "/" + pointerCount + "/" + System.identityHashCode(this)  + "] " + "isDrag");
+                    confirmedDrag = true;
+                    lastDragMouseIndex = mouseButtonIndex;
+                    conn.sendMouseButtonDown(mouseButtonIndex);
+                }
             }
         }
     }
 
     private void addDistanceLazyOnceIfNeeded(int eventX, int eventY, MutableBoolean distanceAdded) {
         // If we've already confirmed something, get out now
-        if (confirmedMove || confirmedDrag || confirmedHold || confirmedScaleTranslateGetter.get()) {
+        if (confirmedMove || confirmedDrag || confirmedHold || confirmedScaleTranslateGetter.get() || confirmedDoubleClickDragTransform) {
             return;
         }
         if (!distanceAdded.value) {
@@ -488,7 +501,7 @@ public class RelativeTouchContext implements TouchContext {
 
     private void checkForConfirmedMove(int eventX, int eventY, MutableBoolean distanceAdded) {
         // If we've already confirmed something, get out now
-        if (confirmedMove || confirmedDrag || confirmedHold || confirmedScaleTranslateGetter.get()) {
+        if (confirmedMove || confirmedDrag || confirmedHold || confirmedScaleTranslateGetter.get() || confirmedDoubleClickDragTransform) {
             return;
         }
 
@@ -517,7 +530,7 @@ public class RelativeTouchContext implements TouchContext {
         // and we have 2 fingers on screen. Leave scroll mode if
         // we no longer have 2 fingers on screen
         boolean origConfirmedScroll = confirmedScroll;
-        confirmedScroll = confirmedScroll || ((actionIndex == 1 && pointerCount == 2 && maxPointerCountInGesture == 2 && confirmedMove && !confirmedScaleTranslateGetter.get()));
+        confirmedScroll = confirmedScroll || ((actionIndex == 1 && pointerCount == 2 && maxPointerCountInGesture == 2 && confirmedMove && !confirmedScaleTranslateGetter.get() && !confirmedDoubleClickDragTransform));
 
         if (confirmedScroll) {
             cancelHoldTimer();
@@ -617,7 +630,9 @@ public class RelativeTouchContext implements TouchContext {
                 if (pointerCount == 2) {
 
                 } else if (confirmedScroll) {
-                    conn.sendMouseHighResScroll((short)(deltaY * SCROLL_SPEED_FACTOR));
+                    conn.sendMouseHighResScroll((short) -(deltaY * SCROLL_SPEED_FACTOR));
+                } else if (confirmedDoubleClickDragTransform) {
+                    scaleTransformCallback.report(eventX - originalTouchX, eventY - originalTouchY, 1.0, false);
                 } else {
                     if (prefConfig.absoluteMouseMode) {
                         conn.sendMouseMoveAsMousePosition(

@@ -42,3 +42,9 @@ app/.externalNativeBuild/
 
 # NDK stuff
 .cxx/
+
+limelightdebug/
+**/sign.gradle
+*.jks
+*.lnk
+
