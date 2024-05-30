@@ -4,6 +4,7 @@ public interface TouchContext {
     public static interface ScaleTransformCallback {
         void report(int transformX, int transformY, double scaleFactor, boolean confirm);
     }
+
     int getActionIndex();
     int getLastTouchX();
     int getLastTouchY();

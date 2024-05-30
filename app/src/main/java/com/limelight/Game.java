@@ -60,6 +60,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Vibrator;
+import android.os.VibratorManager;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Pair;
@@ -106,10 +108,10 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private final TouchContext[] touchContextMap = new TouchContext[2];
     private long threeFingerDownTime = 0;
     private long fourFingerDownTime = 0;
-    private float threeFingerDownAvgX = 0;
-    private float threeFingerDownAvgY = 0;
-    private float threeFingerUpAvgX = 0;
-    private float threeFingerUpAvgY = 0;
+    private float threeFingerDownAvgX = Float.NaN;
+    private float threeFingerDownAvgY = Float.NaN;
+    private float threeFingerUpAvgX = Float.NaN;
+    private float threeFingerUpAvgY = Float.NaN;
 
     private static final int REFERENCE_HORIZ_RES = 1280;
     private static final int REFERENCE_VERT_RES = 720;
@@ -797,6 +799,15 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
         DisplayMetrics screen = getResources().getDisplayMetrics();
 
+        Vibrator vibrator;
+        if (Build.VERSION.SDK_INT>=31) {
+            VibratorManager vibratorManager = (VibratorManager) getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+            vibrator = vibratorManager.getDefaultVibrator();
+        }
+        else {
+            vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+        }
+
         for (int i = 0; i < touchContextMap.length; i++) {
             if (!prefConfig.touchscreenTrackpad) {
                 touchContextMap[i] = new AbsoluteTouchContext(conn, i, streamView,
@@ -805,6 +816,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         prefConfig.modeLongPressNeededToDrag,
                         prefConfig.edgeSingleFingerScrollWidth,
                         prefConfig.shouldDoubleClickDragTransform,
+                        prefConfig.absoluteTouchTapOnlyPlacesMouse,
+                        vibrator,
                         (otherTouchIndex) -> {
                             TouchContext otherTouchContext = touchContextMap[otherTouchIndex];
                             return Pair.create(otherTouchContext.getLastTouchX(), otherTouchContext.getLastTouchY());
@@ -830,6 +843,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         prefConfig.edgeSingleFingerScrollWidth,
                         prefConfig.shouldDoubleClickDragTransform,
                         prefConfig.shouldRelativeLongPressRightClick,
+                        vibrator,
                         () -> lastLeftMouseTapTime,
                         x -> { lastLeftMouseTapTime = x; },
                         (otherTouchIndex) -> {
@@ -2080,6 +2094,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             // This case is for fingers
             else
             {
+                // Log.i("Game", "fingerEvent " + event.toString());
                 if (virtualController != null &&
                         (virtualController.getControllerMode() == VirtualController.ControllerMode.MoveButtons ||
                          virtualController.getControllerMode() == VirtualController.ControllerMode.ResizeButtons)) {

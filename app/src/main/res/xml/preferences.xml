@@ -149,6 +149,11 @@
             android:title="should_relative_long_press_right_click"
             android:summary="should_relative_long_press_right_click"
             android:defaultValue="true" />
+        <CheckBoxPreference
+            android:key="absolute_touch_tap_only_places_mouse"
+            android:title="absolute_touch_tap_only_places_mouse"
+            android:summary="absolute_touch_tap_only_places_mouse"
+            android:defaultValue="false" />
         <EditTextPreference
             android:key="edge_single_finger_scroll_width"
             android:title="edge_single_finger_scroll_width"

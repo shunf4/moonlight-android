@@ -5,6 +5,9 @@ import android.annotation.TargetApi;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.util.Log;
 import android.util.MutableBoolean;
 import android.util.Pair;
 import android.view.View;
@@ -59,6 +62,7 @@ public class RelativeTouchContext implements TouchContext {
     private final boolean shouldDoubleClickDragTransform;
     private final boolean shouldRelativeLongPressRightClick;
 
+    private final Vibrator vibrator;
 
     private final Function<Integer, Pair<Integer, Integer>> otherTouchPosGetter;
     private final ScaleTransformCallback scaleTransformCallback;
@@ -93,6 +97,17 @@ public class RelativeTouchContext implements TouchContext {
         }
     };
 
+    private final Runnable shortHoldRightClickVibrateTimerRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(200, 100));
+            } else {
+                vibrator.vibrate(150);
+            }
+        }
+    };
+
     private final Runnable holdTimerRunnable = new Runnable() {
         @Override
         public void run() {
@@ -106,6 +121,12 @@ public class RelativeTouchContext implements TouchContext {
 //                    || (actionIndex == 1 && maxPointerCountInGesture == 2 && pointerCount == 2)
             )) {
                 return;
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(400, 210));
+            } else {
+                vibrator.vibrate(600);
             }
 
             confirmedHold = true;
@@ -125,6 +146,12 @@ public class RelativeTouchContext implements TouchContext {
 
             if (maxPointerCountInGesture != 2 && pointerCount != 2 && actionIndex != 1) {
                 return;
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(600, 120));
+            } else {
+                vibrator.vibrate(800);
             }
 
             confirmedScaleTranslateSetter.accept(true);
@@ -197,6 +224,7 @@ public class RelativeTouchContext implements TouchContext {
                                 int edgeSingleFingerScrollWidth,
                                 boolean isDoubleClickDragTransform,
                                 boolean shouldRelativeLongPressRightClick,
+                                Vibrator vibrator,
                                 Supplier<Long> lastLeftMouseTapTimeGetter,
                                 Consumer<Long> lastLeftMouseTapTimeSetter,
                                 Function<Integer, Pair<Integer, Integer>> otherTouchPosGetter,
@@ -224,6 +252,7 @@ public class RelativeTouchContext implements TouchContext {
         this.edgeSingleFingerScrollWidth = edgeSingleFingerScrollWidth;
         this.shouldDoubleClickDragTransform = isDoubleClickDragTransform;
         this.shouldRelativeLongPressRightClick = shouldRelativeLongPressRightClick;
+        this.vibrator = vibrator;
 
         this.lastLeftMouseTapTimeGetter = lastLeftMouseTapTimeGetter;
         this.lastLeftMouseTapTimeSetter = lastLeftMouseTapTimeSetter;
@@ -341,6 +370,9 @@ public class RelativeTouchContext implements TouchContext {
                 // Start the timer for engaging a drag
                 startDragTimer();
                 startHoldTimer();
+                if (shouldRelativeLongPressRightClick) {
+                    startShortHoldRightClickVibrateTimer();
+                }
             }
 
             // track pinch/zoom gesture in actionIndex=1 (second touch point)
@@ -374,6 +406,7 @@ public class RelativeTouchContext implements TouchContext {
         cancelDragTimer();
         cancelHoldTimer();
         cancelScaleTranslateTimer();
+        cancelShortHoldRightClickVibrateTimer();
 
 //        Log.i("relT", "[" + actionIndex + "/" + pointerCount + "/" + System.identityHashCode(this)  + "] " + "touchUp");
 
@@ -459,6 +492,11 @@ public class RelativeTouchContext implements TouchContext {
         handler.postDelayed(scaleTranslatePinchZoomTimerRunnable, 450);
     }
 
+    private void startShortHoldRightClickVibrateTimer() {
+        cancelShortHoldRightClickVibrateTimer();
+        handler.postDelayed(shortHoldRightClickVibrateTimerRunnable, 368);
+    }
+
     private void cancelDragTimer() {
         handler.removeCallbacks(dragTimerRunnable);
     }
@@ -469,6 +507,10 @@ public class RelativeTouchContext implements TouchContext {
     private void cancelScaleTranslateTimer() {
         handler.removeCallbacks(scaleTranslateHoldTimerRunnable);
         handler.removeCallbacks(scaleTranslatePinchZoomTimerRunnable);
+    }
+
+    private void cancelShortHoldRightClickVibrateTimer() {
+        handler.removeCallbacks(shortHoldRightClickVibrateTimerRunnable);
     }
 
     @SuppressLint("NewApi")
@@ -498,11 +540,13 @@ public class RelativeTouchContext implements TouchContext {
                 confirmedDoubleClickDragTransform = true;
                 cancelDragTimer();
                 cancelHoldTimer();
+                cancelShortHoldRightClickVibrateTimer();
             } else {
                 byte mouseButtonIndex = getMouseButtonIndex();
                 if (mouseButtonIndex != (byte) 0xFF) {
                     cancelDragTimer();
                     cancelHoldTimer();
+                    cancelShortHoldRightClickVibrateTimer();
                     // Log.i("relT", "[" + actionIndex + "/" + pointerCount + "/" + System.identityHashCode(this)  + "] " + "isDrag");
                     confirmedDrag = true;
                     lastDragMouseIndex = mouseButtonIndex;
@@ -535,6 +579,7 @@ public class RelativeTouchContext implements TouchContext {
             confirmedMove = true;
             cancelDragTimer();
             cancelHoldTimer();
+            cancelShortHoldRightClickVibrateTimer();
             return;
         }
 
@@ -545,6 +590,7 @@ public class RelativeTouchContext implements TouchContext {
             confirmedMove = true;
             cancelDragTimer();
             cancelHoldTimer();
+            cancelShortHoldRightClickVibrateTimer();
             return;
         }
     }
@@ -559,6 +605,7 @@ public class RelativeTouchContext implements TouchContext {
         if (confirmedScroll) {
             cancelHoldTimer();
             cancelDragTimer();
+            cancelShortHoldRightClickVibrateTimer();
         }
 
         if (confirmedScroll && !origConfirmedScroll) {
@@ -586,6 +633,7 @@ public class RelativeTouchContext implements TouchContext {
         if (confirmedScroll) {
             cancelHoldTimer();
             cancelDragTimer();
+            cancelShortHoldRightClickVibrateTimer();
         }
         if (confirmedScroll && !origConfirmedScroll) {
 //            Log.i("relT", "confirmedScroll");
@@ -724,6 +772,7 @@ public class RelativeTouchContext implements TouchContext {
         cancelDragTimer();
         cancelHoldTimer();
         cancelScaleTranslateTimer();
+        cancelShortHoldRightClickVibrateTimer();
 
         // If it was a confirmed drag, we'll need to raise the button now
         if (confirmedDrag) {
@@ -749,6 +798,13 @@ public class RelativeTouchContext implements TouchContext {
 
         if (pointerCount > maxPointerCountInGesture) {
             maxPointerCountInGesture = pointerCount;
+        }
+
+        if (actionIndex > pointerCount - 1) {
+            cancelDragTimer();
+            cancelHoldTimer();
+            cancelScaleTranslateTimer();
+            cancelShortHoldRightClickVibrateTimer();
         }
     }
 }
