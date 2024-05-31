@@ -815,7 +815,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         backgroundTouchView.getHeight(),
                         prefConfig.modeLongPressNeededToDrag,
                         prefConfig.edgeSingleFingerScrollWidth,
-                        prefConfig.shouldDoubleClickDragTransform,
+                        prefConfig.shouldDoubleClickDragTranslate,
                         prefConfig.absoluteTouchTapOnlyPlacesMouse,
                         vibrator,
                         (otherTouchIndex) -> {
@@ -841,7 +841,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         backgroundTouchView.getWidth(),
                         backgroundTouchView.getHeight(),
                         prefConfig.edgeSingleFingerScrollWidth,
-                        prefConfig.shouldDoubleClickDragTransform,
+                        prefConfig.shouldDoubleClickDragTranslate,
                         prefConfig.shouldRelativeLongPressRightClick,
                         vibrator,
                         () -> lastLeftMouseTapTime,
@@ -2203,8 +2203,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                                 if (event.getEventTime() - lastThreeDownSwipe < 1300) {
                                     lastThreeDownSwipe = 0;
                                     if (prefConfig.touchscreenTrackpad) {
-                                        prefConfig.shouldDoubleClickDragTransform = !prefConfig.shouldDoubleClickDragTransform;
-                                        Toast.makeText(this, "Switched to " + (prefConfig.shouldDoubleClickDragTransform ? "shouldDoubleClickDragTransform" : "not-shouldDoubleClickDragTransform"), Toast.LENGTH_SHORT).show();
+                                        prefConfig.shouldDoubleClickDragTranslate = !prefConfig.shouldDoubleClickDragTranslate;
+                                        Toast.makeText(this, "Switched to " + (prefConfig.shouldDoubleClickDragTranslate ? "shouldDoubleClickDragTranslate" : "not-shouldDoubleClickDragTranslate"), Toast.LENGTH_SHORT).show();
                                     } else {
                                         prefConfig.modeLongPressNeededToDrag = !prefConfig.modeLongPressNeededToDrag;
                                         Toast.makeText(this, "Switched to " + (prefConfig.modeLongPressNeededToDrag ? "longPressNeededToDrag" : "not-longPressNeededToDrag"), Toast.LENGTH_SHORT).show();

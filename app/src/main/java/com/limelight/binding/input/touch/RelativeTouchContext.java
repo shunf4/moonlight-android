@@ -59,7 +59,7 @@ public class RelativeTouchContext implements TouchContext {
     private final Handler handler;
     private final Supplier<Long> lastLeftMouseTapTimeGetter;
     private final Consumer<Long> lastLeftMouseTapTimeSetter;
-    private final boolean shouldDoubleClickDragTransform;
+    private final boolean shouldDoubleClickDragTranslate;
     private final boolean shouldRelativeLongPressRightClick;
 
     private final Vibrator vibrator;
@@ -222,7 +222,7 @@ public class RelativeTouchContext implements TouchContext {
                                 View view, PreferenceConfiguration prefConfig,
                                 int outerScreenWidth, int outerScreenHeight,
                                 int edgeSingleFingerScrollWidth,
-                                boolean isDoubleClickDragTransform,
+                                boolean shouldDoubleClickDragTranslate,
                                 boolean shouldRelativeLongPressRightClick,
                                 Vibrator vibrator,
                                 Supplier<Long> lastLeftMouseTapTimeGetter,
@@ -250,7 +250,7 @@ public class RelativeTouchContext implements TouchContext {
         this.outerScreenWidth = outerScreenWidth;
         this.outerScreenHeight = outerScreenHeight;
         this.edgeSingleFingerScrollWidth = edgeSingleFingerScrollWidth;
-        this.shouldDoubleClickDragTransform = isDoubleClickDragTransform;
+        this.shouldDoubleClickDragTranslate = shouldDoubleClickDragTranslate;
         this.shouldRelativeLongPressRightClick = shouldRelativeLongPressRightClick;
         this.vibrator = vibrator;
 
@@ -494,7 +494,7 @@ public class RelativeTouchContext implements TouchContext {
 
     private void startShortHoldRightClickVibrateTimer() {
         cancelShortHoldRightClickVibrateTimer();
-        handler.postDelayed(shortHoldRightClickVibrateTimerRunnable, 368);
+        handler.postDelayed(shortHoldRightClickVibrateTimerRunnable, 368 + 20);
     }
 
     private void cancelDragTimer() {
@@ -536,7 +536,7 @@ public class RelativeTouchContext implements TouchContext {
 //        Log.i("relT", "[" + actionIndex + "/" + pointerCount + "/" + System.identityHashCode(this)  + "] " + "(originalTouchTime - lastLeftMouseTapTimeGetter.get()) " + (originalTouchTime - lastLeftMouseTapTimeGetter.get()) + " maxPointerCountInGesture " + maxPointerCountInGesture);
 
         if (yeah && (actionIndex == 0 && pointerCount == 1 && maxPointerCountInGesture == 1 && (originalTouchTime - lastLeftMouseTapTimeGetter.get()) < 122)) {
-            if (shouldDoubleClickDragTransform) {
+            if (shouldDoubleClickDragTranslate) {
                 confirmedDoubleClickDragTransform = true;
                 cancelDragTimer();
                 cancelHoldTimer();
@@ -567,7 +567,7 @@ public class RelativeTouchContext implements TouchContext {
         }
     }
 
-    private void checkForConfirmedMove(int eventX, int eventY, MutableBoolean distanceAdded) {
+    private void checkForConfirmedMove(int eventX, int eventY, long eventTime, MutableBoolean distanceAdded) {
         // If we've already confirmed something, get out now
         if (confirmedMove || confirmedDrag || confirmedHold || confirmedScaleTranslateGetter.get() || confirmedDoubleClickDragTransform) {
             return;
@@ -577,21 +577,37 @@ public class RelativeTouchContext implements TouchContext {
         if (!isWithinTapBounds(eventX, eventY)) {
 //            Log.i("relT", "confirmedMove 1");
             confirmedMove = true;
-            cancelDragTimer();
-            cancelHoldTimer();
-            cancelShortHoldRightClickVibrateTimer();
-            return;
+        } else {
+            // Check if we've exceeded the maximum distance moved
+            addDistanceLazyOnceIfNeeded(eventX, eventY, distanceAdded);
+            if (distanceMoved >= TAP_DISTANCE_THRESHOLD) {
+//            Log.i("relT", "confirmedMove 2");
+                confirmedMove = true;
+            }
         }
 
-        // Check if we've exceeded the maximum distance moved
-        addDistanceLazyOnceIfNeeded(eventX, eventY, distanceAdded);
-        if (distanceMoved >= TAP_DISTANCE_THRESHOLD) {
-//            Log.i("relT", "confirmedMove 2");
-            confirmedMove = true;
+        if (confirmedMove) {
             cancelDragTimer();
             cancelHoldTimer();
             cancelShortHoldRightClickVibrateTimer();
-            return;
+
+            long timeDelta = eventTime - originalTouchTime;
+//            Log.i("Rel", "timeDelta " + timeDelta);
+            if (timeDelta >= 368) {
+                if (!(
+                        (actionIndex == 0 && maxPointerCountInGesture == 1 && pointerCount == 1)
+                        // conflicts with scaleTranslate
+//                    || (actionIndex == 1 && maxPointerCountInGesture == 2 && pointerCount == 2)
+                )) {
+                    return;
+                }
+
+                confirmedHold = true;
+                byte mouseButtonIndex = getMouseButtonIndex();
+                if (mouseButtonIndex != (byte)0xFF) {
+                    conn.sendMouseButtonDown(mouseButtonIndex);
+                }
+            }
         }
     }
 
@@ -678,7 +694,7 @@ public class RelativeTouchContext implements TouchContext {
         if (eventX != lastTouchX || eventY != lastTouchY)
         {
             checkForConfirmedDoubleClickDrag(eventX, eventY, eventTime, distanceAdded);
-            checkForConfirmedMove(eventX, eventY, distanceAdded);
+            checkForConfirmedMove(eventX, eventY, eventTime, distanceAdded);
             checkForConfirmedOneFingerScroll();
             checkForConfirmedDoubleFingerScroll();
             checkForConfirmedScaleTranslate(eventX, eventY);

@@ -52,7 +52,7 @@ public class AbsoluteTouchContext implements TouchContext {
     private boolean confirmedLongPressRightClick;
     private boolean confirmedLongPressHold;
     private boolean confirmedMouseLeftButtonDown;
-    private boolean shouldDoubleClickDragTransform;
+    private boolean shouldDoubleClickDragTranslate;
     private final boolean modeLongPressNeededToDrag;
     private final boolean absoluteTouchTapOnlyPlacesMouse;
     private final Vibrator vibrator;
@@ -196,7 +196,7 @@ public class AbsoluteTouchContext implements TouchContext {
                                 int outerScreenWidth, int outerScreenHeight,
                                 boolean modeLongPressNeededToDrag,
                                 int edgeSingleFingerScrollWidth,
-                                boolean shouldDoubleClickDragTransform,
+                                boolean shouldDoubleClickDragTranslate,
                                 boolean absoluteTouchTapOnlyPlacesMouse,
                                 Vibrator vibrator,
                                 Function<Integer, Pair<Integer, Integer>> otherTouchPosGetter,
@@ -221,7 +221,7 @@ public class AbsoluteTouchContext implements TouchContext {
 
         this.modeLongPressNeededToDrag = modeLongPressNeededToDrag;
         this.edgeSingleFingerScrollWidth = edgeSingleFingerScrollWidth;
-        this.shouldDoubleClickDragTransform = shouldDoubleClickDragTransform;
+        this.shouldDoubleClickDragTranslate = shouldDoubleClickDragTranslate;
         this.absoluteTouchTapOnlyPlacesMouse = absoluteTouchTapOnlyPlacesMouse;
         this.vibrator = vibrator;
 
@@ -443,8 +443,12 @@ public class AbsoluteTouchContext implements TouchContext {
 //    }
 
     private void checkForMouseLeftButtonDown(boolean isAboutToHold) {
-        if (confirmedMouseLeftButtonDown || confirmedLongPressRightClick || confirmedLongPressHold || hasEverScrolled || confirmedScaleTranslateGetter.get()) {
+        if (confirmedMouseLeftButtonDown || confirmedLongPressHold || hasEverScrolled || confirmedScaleTranslateGetter.get()) {
             return;
+        }
+
+        if (confirmedLongPressRightClick) {
+            confirmedLongPressRightClick = false;
         }
 
         confirmedMouseLeftButtonDown = true;
@@ -548,7 +552,7 @@ public class AbsoluteTouchContext implements TouchContext {
                 }
             }
 
-            if (shouldDoubleClickDragTransform) {
+            if (shouldDoubleClickDragTranslate) {
                 if (!confirmedScaleTranslateGetter.get() && !hasEverScrolled && !confirmedMouseLeftButtonDown && distanceExceeds(eventX - lastTouchDownX, eventY - lastTouchDownY, TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD) && maxPointerCountInGesture == 1 && !confirmedScaleTranslateGetter.get()) {
                     if (lastTouchDownTime - lastTouchUpTime > DOUBLE_TAP_TIME_THRESHOLD ||
                             distanceExceeds(lastTouchDownX - lastTouchUpX, lastTouchDownY - lastTouchUpY, DOUBLE_TAP_DISTANCE_THRESHOLD)) {

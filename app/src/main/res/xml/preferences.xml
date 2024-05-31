@@ -140,9 +140,9 @@
             android:summary="mode_long_press_needed_to_drag"
             android:defaultValue="false" />
         <CheckBoxPreference
-            android:key="should_double_click_drag_transform"
-            android:title="should_double_click_drag_transform"
-            android:summary="should_double_click_drag_transform"
+            android:key="should_double_click_drag_translate"
+            android:title="should_double_click_drag_translate"
+            android:summary="should_double_click_drag_translate"
             android:defaultValue="false" />
         <CheckBoxPreference
             android:key="should_relative_long_press_right_click"
