@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.bouncycastle.util.encoders.Hex;
 import org.jcodec.codecs.h264.H264Utils;
 import org.jcodec.codecs.h264.io.model.SeqParameterSet;
 import org.jcodec.codecs.h264.io.model.VUIParameters;
@@ -23,6 +24,13 @@ import com.limelight.preferences.PreferenceConfiguration;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffXfermode;
+import android.graphics.Rect;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
@@ -33,8 +41,10 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Process;
 import android.os.SystemClock;
+import android.util.Log;
 import android.util.Range;
 import android.view.Choreographer;
+import android.view.PixelCopy;
 import android.view.SurfaceHolder;
 
 public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements Choreographer.FrameCallback {
@@ -70,7 +80,8 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     private boolean refFrameInvalidationActive;
     private int initialWidth, initialHeight;
     private int videoFormat;
-    private SurfaceHolder renderTarget;
+    private SurfaceHolder renderTarget1;
+    private SurfaceHolder renderTarget2;
     private volatile boolean stopping;
     private CrashListener crashListener;
     private boolean reportedCrash;
@@ -120,13 +131,22 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     private static final int OUTPUT_BUFFER_QUEUE_LIMIT = 2;
     private long lastRenderedFrameTimeNanos;
     private HandlerThread choreographerHandlerThread;
+    private HandlerThread syncToTarget2Thread;
     private Handler choreographerHandler;
+    private Handler syncToTarget2Handler;
+    private Bitmap syncToTarget2Bitmap;
 
     private int numSpsIn;
     private int numPpsIn;
     private int numVpsIn;
     private int numFramesIn;
     private int numFramesOut;
+
+    private int target2Crop = 0;
+
+    public void setTarget2Crop(int target2Crop) {
+        this.target2Crop = target2Crop;
+    }
 
     private MediaCodecInfo findAvcDecoder() {
         MediaCodecInfo decoder = MediaCodecHelper.findProbableSafeDecoder("video/avc", MediaCodecInfo.CodecProfileLevel.AVCProfileHigh);
@@ -291,7 +311,11 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     }
 
     public void setRenderTarget(SurfaceHolder renderTarget) {
-        this.renderTarget = renderTarget;
+        this.renderTarget1 = renderTarget;
+    }
+
+    public void setRenderTarget2(SurfaceHolder renderTarget) {
+        this.renderTarget2 = renderTarget;
     }
 
     public MediaCodecDecoderRenderer(Activity activity, PreferenceConfiguration prefs,
@@ -537,7 +561,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
         LimeLog.info("Configuring with format: "+format);
 
-        videoDecoder.configure(format, renderTarget.getSurface(), null, 0);
+        videoDecoder.configure(format, renderTarget1.getSurface(), null, 0);
 
         configuredFormat = format;
 
@@ -970,6 +994,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         return false;
     }
 
+    @TargetApi(Build.VERSION_CODES.O)
     @Override
     public void doFrame(long frameTimeNanos) {
         // Do nothing if we're stopping
@@ -994,6 +1019,42 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
             Integer nextOutputBuffer = outputBufferQueue.poll();
             if (nextOutputBuffer != null) {
                 try {
+
+//                    ByteBuffer outputBuffer = videoDecoder.getOutputBuffer(nextOutputBuffer.intValue());
+//                    Log.i(MediaCodecDecoderRenderer.class.getSimpleName(), "outputBuffer " + outputBuffer.position() + " " + outputBuffer.limit());
+//                    byte[] data = new byte[outputBuffer.remaining()];
+//                    outputBuffer.get(data);
+//                    if (data.length > 0) {
+//                        Log.i(MediaCodecDecoderRenderer.class.getSimpleName(), "data " + data.length + " " + Hex.toHexString(data));
+//                    }
+
+                    PixelCopy.request(renderTarget1.getSurface(), renderTarget1.getSurfaceFrame(), syncToTarget2Bitmap, (copyResult) -> {
+                        if (copyResult == PixelCopy.SUCCESS) {
+                            int l = 0;
+                            int r = target2Crop;
+                            if (target2Crop < 0) {
+                                r = syncToTarget2Bitmap.getWidth();
+                                l = r + target2Crop;
+                            }
+                            Rect rect = new Rect(l, 0, r, syncToTarget2Bitmap.getHeight());
+                            Paint paint = new Paint();
+                            paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
+
+                            Canvas canvas = renderTarget2.lockCanvas(null);
+                            canvas.drawBitmap(syncToTarget2Bitmap, 0, 0, null);
+                            canvas.drawRect(rect, paint);
+
+                            renderTarget2.unlockCanvasAndPost(canvas);
+                        }
+                    }, syncToTarget2Handler);
+
+//                    Canvas canvas = renderTarget2.lockCanvas(null);
+//                    Log.i(MediaCodecDecoderRenderer.class.getSimpleName(), "Bitmap: " + (bitmap == null ? "null" : bitmap.toString()));
+//                    if (bitmap != null ) {
+//                        canvas.drawBitmap(bitmap, 0, 0, null);
+//                    }
+//                    renderTarget2.unlockCanvasAndPost(canvas);
+
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                         videoDecoder.releaseOutputBuffer(nextOutputBuffer, frameTimeNanos);
                     }
@@ -1034,6 +1095,10 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         choreographerHandlerThread = new HandlerThread("Video - Choreographer", Process.THREAD_PRIORITY_DEFAULT + Process.THREAD_PRIORITY_MORE_FAVORABLE);
         choreographerHandlerThread.start();
 
+        syncToTarget2Thread = new HandlerThread("syncToTarget2Thread", Process.THREAD_PRIORITY_DEFAULT + Process.THREAD_PRIORITY_MORE_FAVORABLE);
+        syncToTarget2Thread.start();
+        syncToTarget2Bitmap = Bitmap.createBitmap(renderTarget1.getSurfaceFrame().width(), renderTarget1.getSurfaceFrame().height(), Bitmap.Config.ARGB_8888);
+
         // Start the frame callbacks
         choreographerHandler = new Handler(choreographerHandlerThread.getLooper());
         choreographerHandler.post(new Runnable() {
@@ -1042,6 +1107,8 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                 Choreographer.getInstance().postFrameCallback(MediaCodecDecoderRenderer.this);
             }
         });
+
+        syncToTarget2Handler = new Handler(syncToTarget2Thread.getLooper());
     }
 
     private void startRendererThread()
@@ -1055,6 +1122,8 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                         // Try to output a frame
                         int outIndex = videoDecoder.dequeueOutputBuffer(info, 50000);
                         if (outIndex >= 0) {
+                            Log.i(MediaCodecDecoderRenderer.class.getSimpleName(), "info " + info.offset + " " + info.size + " " + outIndex);
+                            Log.i(MediaCodecDecoderRenderer.class.getSimpleName(), "info " + info.presentationTimeUs);
                             long presentationTimeUs = info.presentationTimeUs;
                             int lastIndex = outIndex;
 
@@ -1071,6 +1140,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                                     lastIndex = outIndex;
                                     presentationTimeUs = info.presentationTimeUs;
                                 }
+
 
                                 if (prefs.framePacing == PreferenceConfiguration.FRAME_PACING_MAX_SMOOTHNESS ||
                                         prefs.framePacing == PreferenceConfiguration.FRAME_PACING_CAP_FPS) {
@@ -1117,6 +1187,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
                                 // Add this buffer
                                 outputBufferQueue.add(lastIndex);
+
                             }
 
                             // Add delta time to the totals (excluding probable outliers)

@@ -50,6 +50,7 @@ import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.hardware.input.InputManager;
@@ -152,6 +153,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private boolean waitingForAllModifiersUp = false;
     private int specialKeyCode = KeyEvent.KEYCODE_UNKNOWN;
     private StreamView streamView;
+    private StreamView streamView2;
     private View backgroundTouchView;
     private long lastAbsTouchUpTime = 0;
     private long lastAbsTouchDownTime = 0;
@@ -269,6 +271,10 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         streamView.setOnGenericMotionListener(this);
         streamView.setOnKeyListener(this);
         streamView.setInputCallbacks(this);
+
+        streamView2 = findViewById(R.id.surfaceView2);
+        streamView2.setZOrderOnTop(true);
+        streamView2.getHolder().setFormat(PixelFormat.TRANSPARENT);
 
         // Listen for touch events on the background touch view to enable trackpad mode
         // to work on areas outside of the StreamView itself. We use a separate View
@@ -558,6 +564,22 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
         // The connection will be started when the surface gets created
         streamView.getHolder().addCallback(this);
+        streamView2.getHolder().addCallback(new SurfaceHolder.Callback() {
+            @Override
+            public void surfaceCreated(SurfaceHolder holder) {
+
+            }
+
+            @Override
+            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+                decoderRenderer.setRenderTarget2(holder);
+            }
+
+            @Override
+            public void surfaceDestroyed(SurfaceHolder holder) {
+
+            }
+        });
     }
 
     private void setPreferredOrientationForCurrentDisplay() {
@@ -795,6 +817,16 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             streamView.setTranslationY(currTranslateY);
             streamView.setScaleX(currScale);
             streamView.setScaleY(currScale);
+
+            streamView2.setTranslationX(-currTranslateX);
+            streamView2.setTranslationY(currTranslateY);
+            streamView2.setScaleX(currScale);
+            streamView2.setScaleY(currScale);
+            if (currTranslateX < 0) {
+                decoderRenderer.setTarget2Crop((int)(streamView2.getWidth() * currScale / 2 + currTranslateX));
+            } else {
+                decoderRenderer.setTarget2Crop((int)(-(streamView2.getWidth() * currScale / 2 - currTranslateX)));
+            }
         };
 
         DisplayMetrics screen = getResources().getDisplayMetrics();
@@ -1066,10 +1098,12 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         if (prefConfig.stretchVideo || aspectRatioMatch) {
             // Set the surface to the size of the video
             streamView.getHolder().setFixedSize(prefConfig.width, prefConfig.height);
+            streamView2.getHolder().setFixedSize(prefConfig.width, prefConfig.height);
         }
         else {
             // Set the surface to scale based on the aspect ratio of the stream
             streamView.setDesiredAspectRatio((double)prefConfig.width / (double)prefConfig.height);
+            streamView2.setDesiredAspectRatio((double)prefConfig.width / (double)prefConfig.height);
         }
 
         // Set the desired refresh rate that will get passed into setFrameRate() later
@@ -1652,7 +1686,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
         // For the containing background view, we must subtract the origin
         // of the StreamView to get video-relative coordinates.
-        if (view != streamView) {
+        if (view != streamView && view != streamView2) {
             normalizedX -= streamView.getX();
             normalizedY -= streamView.getY();
         }
@@ -2110,7 +2144,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 int eventX = (int)(xRelScreenView);
                 int eventY = (int)(yRelScreenView);
 
-                if (view != streamView) {
+                if (view != streamView && view != streamView2) {
                     xRelScreenView -= streamView.getX() + streamView.getPivotX();
                     yRelScreenView -= streamView.getY() + streamView.getPivotY();
                     xRelScreenView = xRelScreenView / savedScale;
@@ -2272,6 +2306,10 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                             streamView.setTranslationY(0.0f);
                             streamView.setScaleX(1.0f);
                             streamView.setScaleY(1.0f);
+                            streamView2.setTranslationX(0.0f);
+                            streamView2.setTranslationY(0.0f);
+                            streamView2.setScaleX(1.0f);
+                            streamView2.setScaleY(1.0f);
                             savedScale = 1.0f;
                             savedTranslateX = 0.0f;
                             savedTranslateY = 0.0f;
@@ -2309,7 +2347,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         int eventXT1 = (int)(xRelScreenViewT1);
                         int eventYT1 = (int)(yRelScreenViewT1);
 
-                        if (view != streamView) {
+                        if (view != streamView && view != streamView2) {
                             xRelScreenViewT1 -= streamView.getX() + streamView.getPivotX();
                             yRelScreenViewT1 -= streamView.getY() + streamView.getPivotY();
                             xRelScreenViewT1 = xRelScreenViewT1 / savedScale;
@@ -2349,7 +2387,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                                 int eventXCurr = (int)(xRelScreenViewCurr);
                                 int eventYCurr = (int)(yRelScreenViewCurr);
 
-                                if (view != streamView) {
+                                if (view != streamView && view != streamView2) {
                                     xRelScreenViewCurr -= streamView.getX() + streamView.getPivotX();
                                     yRelScreenViewCurr -= streamView.getY() + streamView.getPivotY();
                                     xRelScreenViewCurr = xRelScreenViewCurr / savedScale;
@@ -2382,7 +2420,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                             int eventXCurr = (int)(xRelScreenViewCurr);
                             int eventYCurr = (int)(yRelScreenViewCurr);
 
-                            if (view != streamView) {
+                            if (view != streamView && view != streamView2) {
                                 xRelScreenViewCurr -= streamView.getX() + streamView.getPivotX();
                                 yRelScreenViewCurr -= streamView.getY() + streamView.getPivotY();
                                 xRelScreenViewCurr = xRelScreenViewCurr / savedScale;
@@ -2438,6 +2476,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             eventX = event.getX(0);
             eventY = event.getY(0);
         }
+        else if (touchedView == streamView2) { return; }
         else {
             // For the containing background view, we must subtract the origin
             // of the StreamView to get video-relative coordinates.

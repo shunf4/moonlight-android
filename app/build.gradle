@@ -123,9 +123,9 @@ android {
             // is to please change the applicationId before you publish.
             //
             // TL;DR: Leave the following line alone!
-            applicationIdSuffix ".shunf4_mod"
-            resValue "string", "app_label", "Moonlight (shunf4)"
-            resValue "string", "app_label_root", "Moonlight (Root)"
+            applicationIdSuffix ".vr.shunf4_mod"
+            resValue "string", "app_label", "MoonlightVR (shunf4)"
+            resValue "string", "app_label_root", "MoonlightVR (Root)"
 
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
