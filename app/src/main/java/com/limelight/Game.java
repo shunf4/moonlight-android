@@ -42,6 +42,8 @@ import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.PictureInPictureParams;
 import android.app.Service;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -62,6 +64,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Vibrator;
 import android.os.VibratorManager;
+import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Pair;
@@ -561,6 +564,32 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     }
 
     private void setPreferredOrientationForCurrentDisplay() {
+        try {
+            Settings.System.putInt(getContentResolver(), Settings.System.USER_ROTATION, 1);
+        } catch (Throwable t) {
+            Log.w(Game.class.getSimpleName(), Log.getStackTraceString(t));
+            ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+
+            if (clipboard != null) {
+                ClipData clip = ClipData.newPlainText("text", "appops set com.limelight.shunf4_mod WRITE_SETTINGS allow; appops set com.limelight.shunf4_mod WRITE_SECURE_SETTINGS allow; pm grant com.limelight.shunf4_mod android.permission.WRITE_SETTINGS; pm grant com.limelight.shunf4_mod android.permission.WRITE_SECURE_SETTINGS; ");
+                clipboard.setPrimaryClip(clip);
+            }
+
+            Toast.makeText(this, "Rotate: system denied. Copied grant command to clipboard.", Toast.LENGTH_LONG).show();
+        }
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_USER);
+//        Handler h = new Handler();
+//        h.postDelayed(new Runnable() {
+//            @Override
+//            public void run() {
+//                // setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_USER);
+//                // setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+//            }
+//        }, 3000);
+        return;
+    }
+        
+    private void setPreferredOrientationForCurrentDisplay___unusedunused() {
         Display display = getWindowManager().getDefaultDisplay();
 
         // For semi-square displays, we use more complex logic to determine which orientation to use (if any)
@@ -604,7 +633,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         super.onConfigurationChanged(newConfig);
 
         // Set requested orientation for possible new screen size
-        setPreferredOrientationForCurrentDisplay();
+        // setPreferredOrientationForCurrentDisplay();
 
         if (virtualController != null) {
             // Refresh layout of OSC for possible new screen size
