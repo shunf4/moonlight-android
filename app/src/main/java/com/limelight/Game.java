@@ -52,6 +52,7 @@ import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.hardware.input.InputManager;
@@ -213,6 +214,49 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     public static final String EXTRA_APP_HDR = "HDR";
     public static final String EXTRA_SERVER_CERT = "ServerCert";
 
+    public static boolean IS_ONYX_BOOX_DEVICE = false;
+
+    static {
+        try {
+            Class<?> c = null;
+            try {
+                c = Class.forName("android.os.SystemProperties");
+            } catch (ClassNotFoundException e) {
+                throw new RuntimeException(e);
+            }
+            Method get = null;
+            try {
+                get = c.getMethod("get", String.class);
+            } catch (NoSuchMethodException e) {
+                throw new RuntimeException(e);
+            }
+
+            String property1 = null;
+            try {
+                property1 = (String) get.invoke(c, "sys.onyx.idledelay");
+            } catch (IllegalAccessException e) {
+                throw new RuntimeException(e);
+            } catch (InvocationTargetException e) {
+                throw new RuntimeException(e);
+            }
+            String property2 = null;
+            try {
+                property2 = (String) get.invoke(c, "vendor.onyx_dump_enable");
+            } catch (IllegalAccessException e) {
+                throw new RuntimeException(e);
+            } catch (InvocationTargetException e) {
+                throw new RuntimeException(e);
+            }
+
+            if ((property1 != null && !property1.isEmpty()) || (property2 != null && !property2.isEmpty())) {
+                Log.w(Game.class.getName(), "set IS_ONYX_BOOX_DEVICE to true");
+                IS_ONYX_BOOX_DEVICE = true;
+            }
+        } catch (Exception e) {
+            Log.w(Game.class.getName(), Log.getStackTraceString(e));
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -223,16 +267,26 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         requestWindowFeature(Window.FEATURE_NO_TITLE);
 
         // Full-screen
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        if (!IS_ONYX_BOOX_DEVICE) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        }
 
         // If we're going to use immersive mode, we want to have
         // the entire screen
-        getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+        if (IS_ONYX_BOOX_DEVICE) {
+            getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+//                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
                         View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
                         View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+        }
 
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
+//        getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
 
         // Listen for UI visibility events
         getWindow().getDecorView().setOnSystemUiVisibilityChangeListener(this);
@@ -254,7 +308,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         // Enter landscape unless we're on a square screen
         setPreferredOrientationForCurrentDisplay();
 
-        if (prefConfig.stretchVideo || shouldIgnoreInsetsForResolution(prefConfig.width, prefConfig.height)) {
+        if (true || prefConfig.stretchVideo || shouldIgnoreInsetsForResolution(prefConfig.width, prefConfig.height)) {
             // Allow the activity to layout under notches if the fill-screen option
             // was turned on by the user or it's a full-screen native resolution
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -263,7 +317,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             }
             else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 getWindow().getAttributes().layoutInDisplayCutoutMode =
-                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+                                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
             }
         }
 
@@ -1092,6 +1146,10 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             }
         }
 
+        if (IS_ONYX_BOOX_DEVICE) {
+            streamView.getHolder().setFormat(PixelFormat.RGB_332);
+        }
+
         if (prefConfig.stretchVideo || aspectRatioMatch) {
             // Set the surface to the size of the video
             streamView.getHolder().setFixedSize(prefConfig.width, prefConfig.height);
@@ -1133,13 +1191,23 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 }
                 else {
                     // Use immersive mode
-                    Game.this.getWindow().getDecorView().setSystemUiVisibility(
-                            View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-                            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
-                            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
-                            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
-                            View.SYSTEM_UI_FLAG_FULLSCREEN |
-                            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+                    if (IS_ONYX_BOOX_DEVICE) {
+                        Game.this.getWindow().getDecorView().setSystemUiVisibility(
+                                View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+//                            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+//                            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                                        View.SYSTEM_UI_FLAG_FULLSCREEN |
+                                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+                    } else {
+                        Game.this.getWindow().getDecorView().setSystemUiVisibility(
+                                View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                                        View.SYSTEM_UI_FLAG_FULLSCREEN |
+                                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+                    }
                 }
             }
     };
@@ -1456,8 +1524,19 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
     @Override
     public boolean handleKeyDown(KeyEvent event) {
+        if (IS_ONYX_BOOX_DEVICE && ((event.getFlags() == 0xC8) && event.getSource() == 0x101 && event.getKeyCode() == KeyEvent.KEYCODE_UNKNOWN)) {
+            // Onyx BOOX nav back button long press
+            toggleKeyboard();
+            return true;
+        }
+
         // Pass-through virtual navigation keys
         if ((event.getFlags() & KeyEvent.FLAG_VIRTUAL_HARD_KEY) != 0) {
+            return false;
+        }
+
+        // Onyx BOOX sends nav bar back button with NO FLAG_VIRTUAL_HARD_KEY flag, with non-standard event source 0x12345678
+        if (IS_ONYX_BOOX_DEVICE && ((event.getFlags() & KeyEvent.FLAG_VIRTUAL_HARD_KEY) == 0 && event.getSource() == 0x12345678)) {
             return false;
         }
 
@@ -1540,6 +1619,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     public boolean handleKeyUp(KeyEvent event) {
         // Pass-through virtual navigation keys
         if ((event.getFlags() & KeyEvent.FLAG_VIRTUAL_HARD_KEY) != 0) {
+            return false;
+        }
+
+        // Onyx BOOX sends nav bar back button with NO FLAG_VIRTUAL_HARD_KEY flag, with non-standard event source 0x12345678
+        if (IS_ONYX_BOOX_DEVICE && ((event.getFlags() & KeyEvent.FLAG_VIRTUAL_HARD_KEY) == 0 && event.getSource() == 0x12345678)) {
             return false;
         }
 
@@ -2250,21 +2334,31 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                                 if (event.getEventTime() - lastThreeLeftRightSwipe < 1300) {
                                     lastThreeLeftRightSwipe = 0;
                                     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-                                    getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
-                                    getWindow().getDecorView().getRootView().setSystemUiVisibility(
-                                            View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-                                            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
-                                            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
-                                            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
-                                            View.SYSTEM_UI_FLAG_FULLSCREEN
-                                    );
-                                    getWindow().getDecorView().setSystemUiVisibility(
-                                            View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-                                                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
-                                                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
-                                                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
-                                                    View.SYSTEM_UI_FLAG_FULLSCREEN
-                                    );
+//                                    getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
+                                    getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
+                                    if (IS_ONYX_BOOX_DEVICE) {
+                                        getWindow().getDecorView().getRootView().setSystemUiVisibility(
+                                                View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                                                        //                                                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                                                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                        );
+                                        getWindow().getDecorView().setSystemUiVisibility(
+                                                View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                                                        //                                                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                                                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                        );
+                                    } else {
+                                        getWindow().getDecorView().getRootView().setSystemUiVisibility(
+                                                View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                                                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                                                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                        );
+                                        getWindow().getDecorView().setSystemUiVisibility(
+                                                View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                                                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                                                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                        );
+                                    }
 
                                 } else {
                                     lastThreeLeftRightSwipe = event.getEventTime();
@@ -2276,17 +2370,31 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                                 if (event.getEventTime() - lastThreeLeftRightSwipe < 1300) {
                                     lastThreeLeftRightSwipe = 0;
                                     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-                                    getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
-                                    getWindow().getDecorView().getRootView().setSystemUiVisibility(
-                                            View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-                                                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
-                                                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                                    );
-                                    getWindow().getDecorView().setSystemUiVisibility(
-                                            View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-                                                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
-                                                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                                    );
+//                                    getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
+                                    getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
+                                    if (IS_ONYX_BOOX_DEVICE) {
+                                        getWindow().getDecorView().getRootView().setSystemUiVisibility(
+                                                View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+//                                                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                                                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                        );
+                                        getWindow().getDecorView().setSystemUiVisibility(
+                                                View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+//                                                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                                                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                        );
+                                    } else {
+                                        getWindow().getDecorView().getRootView().setSystemUiVisibility(
+                                                View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                                                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                                                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                        );
+                                        getWindow().getDecorView().setSystemUiVisibility(
+                                                View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                                                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                                                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                        );
+                                    }
                                 } else {
                                     lastThreeLeftRightSwipe = event.getEventTime();
                                 }
@@ -2971,7 +3079,9 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             hideSystemUi(2000);
         }
         else if ((visibility & View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0) {
-            hideSystemUi(2000);
+            if (!IS_ONYX_BOOX_DEVICE) {
+                hideSystemUi(2000);
+            }
         }
     }
 

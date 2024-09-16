@@ -1,3 +1,13 @@
+# shunf4 mod
+
+- 3-finger swipe up: keyboard
+- 3-finger swipe down: switch trackpad/touchscreen
+- 3-finger swipe down fast twice: switch some settings
+- 3-finger swipe left/right: reset mouse position
+- 3-finger swipe left/right fast twice: show navbar & status bar
+- 4-finger touch: reset mouse position & reset scale/translate
+- Onyx BOOX long-press nav bar back button: keyboard
+
 # Moonlight Android
 
 [![AppVeyor Build Status](https://ci.appveyor.com/api/projects/status/232a8tadrrn8jv0k/branch/master?svg=true)](https://ci.appveyor.com/project/cgutman/moonlight-android/branch/master)
