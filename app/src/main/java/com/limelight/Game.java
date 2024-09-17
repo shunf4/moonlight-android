@@ -52,6 +52,9 @@ import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
+import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
@@ -266,25 +269,6 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         // We don't want a title bar
         requestWindowFeature(Window.FEATURE_NO_TITLE);
 
-        // Full-screen
-        if (!IS_ONYX_BOOX_DEVICE) {
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-        }
-
-        // If we're going to use immersive mode, we want to have
-        // the entire screen
-        if (IS_ONYX_BOOX_DEVICE) {
-            getWindow().getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-//                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
-                            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
-        } else {
-            getWindow().getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
-                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
-        }
-
 //        getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
 
@@ -303,6 +287,26 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
         // Read the stream preferences
         prefConfig = PreferenceConfiguration.readPreferences(this);
+
+        // Full-screen
+        if (!prefConfig.isCurrDeviceLikeOnyx) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        }
+
+        // If we're going to use immersive mode, we want to have
+        // the entire screen
+        if (prefConfig.isCurrDeviceLikeOnyx) {
+            getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+//                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+        }
+        
         tombstonePrefs = Game.this.getSharedPreferences("DecoderTombstone", 0);
 
         // Enter landscape unless we're on a square screen
@@ -326,6 +330,16 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         streamView.setOnGenericMotionListener(this);
         streamView.setOnKeyListener(this);
         streamView.setInputCallbacks(this);
+
+        // Paint p = new Paint();
+        // ColorMatrix cm = new ColorMatrix(new float[] {
+        //         0f, 32f, 0f, 0f, 0f,
+        //         32f, 0f, 0f, 0f, 0f,
+        //         0f, 0f, 64f, 0f, 0f,
+        //         0f, 0f, 0f, 1f, 0f
+        // });
+        // p.setColorFilter(new ColorMatrixColorFilter(cm));
+//        streamView.setLayerType(View.LAYER_TYPE_SOFTWARE, p);
 
         // Listen for touch events on the background touch view to enable trackpad mode
         // to work on areas outside of the StreamView itself. We use a separate View
@@ -618,18 +632,20 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     }
 
     private void setPreferredOrientationForCurrentDisplay() {
-        try {
-            Settings.System.putInt(getContentResolver(), Settings.System.USER_ROTATION, 1);
-        } catch (Throwable t) {
-            Log.w(Game.class.getSimpleName(), Log.getStackTraceString(t));
-            ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (prefConfig.shouldUserRotateLandscapeAtStart) {
+            try {
+                Settings.System.putInt(getContentResolver(), Settings.System.USER_ROTATION, 1);
+            } catch (Throwable t) {
+                Log.w(Game.class.getSimpleName(), Log.getStackTraceString(t));
+                ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
 
-            if (clipboard != null) {
-                ClipData clip = ClipData.newPlainText("text", "appops set com.limelight.shunf4_mod WRITE_SETTINGS allow; appops set com.limelight.shunf4_mod WRITE_SECURE_SETTINGS allow; pm grant com.limelight.shunf4_mod android.permission.WRITE_SETTINGS; pm grant com.limelight.shunf4_mod android.permission.WRITE_SECURE_SETTINGS; ");
-                clipboard.setPrimaryClip(clip);
+                if (clipboard != null) {
+                    ClipData clip = ClipData.newPlainText("text", "appops set com.limelight.shunf4_mod WRITE_SETTINGS allow; appops set com.limelight.shunf4_mod WRITE_SECURE_SETTINGS allow; pm grant com.limelight.shunf4_mod android.permission.WRITE_SETTINGS; pm grant com.limelight.shunf4_mod android.permission.WRITE_SECURE_SETTINGS; ");
+                    clipboard.setPrimaryClip(clip);
+                }
+
+                Toast.makeText(this, "Rotate: system denied. Copied grant command to clipboard.", Toast.LENGTH_LONG).show();
             }
-
-            Toast.makeText(this, "Rotate: system denied. Copied grant command to clipboard.", Toast.LENGTH_LONG).show();
         }
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_USER);
 //        Handler h = new Handler();
@@ -864,7 +880,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 savedScale = currScale;
                 savedTranslateX = currTranslateX;
                 savedTranslateY = currTranslateY;
-                if (Math.abs(savedTranslateX) > 3000.0f || Math.abs(savedTranslateY) > 2500.0f || savedScale > 29.0f || savedScale < 0.03f) {
+                if (Math.abs(savedTranslateX) > 3000.0f || Math.abs(savedTranslateY) > 2500.0f || savedScale > 40.0f || savedScale < 0.03f) {
                     savedScale = 1.0f;
                     savedTranslateX = 0.0f;
                     savedTranslateY = 0.0f;
@@ -1146,10 +1162,6 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             }
         }
 
-        if (IS_ONYX_BOOX_DEVICE) {
-            streamView.getHolder().setFormat(PixelFormat.RGB_332);
-        }
-
         if (prefConfig.stretchVideo || aspectRatioMatch) {
             // Set the surface to the size of the video
             streamView.getHolder().setFixedSize(prefConfig.width, prefConfig.height);
@@ -1157,6 +1169,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         else {
             // Set the surface to scale based on the aspect ratio of the stream
             streamView.setDesiredAspectRatio((double)prefConfig.width / (double)prefConfig.height);
+
+            streamView.setLayoutParams(new FrameLayout.LayoutParams(prefConfig.width, prefConfig.height));
         }
 
         // Set the desired refresh rate that will get passed into setFrameRate() later
@@ -1191,7 +1205,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 }
                 else {
                     // Use immersive mode
-                    if (IS_ONYX_BOOX_DEVICE) {
+                    if (prefConfig.isCurrDeviceLikeOnyx) {
                         Game.this.getWindow().getDecorView().setSystemUiVisibility(
                                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
 //                            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
@@ -1245,6 +1259,22 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     @Override
     protected void onDestroy() {
         super.onDestroy();
+
+        if (prefConfig.shouldUserRotateLandscapeAtStart) {
+            try {
+                Settings.System.putInt(getContentResolver(), Settings.System.USER_ROTATION, 0);
+            } catch (Throwable t) {
+                Log.w(Game.class.getSimpleName(), Log.getStackTraceString(t));
+                ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+
+                if (clipboard != null) {
+                    ClipData clip = ClipData.newPlainText("text", "appops set com.limelight.shunf4_mod WRITE_SETTINGS allow; appops set com.limelight.shunf4_mod WRITE_SECURE_SETTINGS allow; pm grant com.limelight.shunf4_mod android.permission.WRITE_SETTINGS; pm grant com.limelight.shunf4_mod android.permission.WRITE_SECURE_SETTINGS; ");
+                    clipboard.setPrimaryClip(clip);
+                }
+
+                Toast.makeText(this, "Rotate: system denied. Copied grant command to clipboard.", Toast.LENGTH_LONG).show();
+            }
+        }
 
         if (controllerHandler != null) {
             controllerHandler.destroy();
@@ -1524,7 +1554,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
     @Override
     public boolean handleKeyDown(KeyEvent event) {
-        if (IS_ONYX_BOOX_DEVICE && ((event.getFlags() == 0xC8) && event.getSource() == 0x101 && event.getKeyCode() == KeyEvent.KEYCODE_UNKNOWN)) {
+        if (prefConfig.isCurrDeviceLikeOnyx && ((event.getFlags() == 0xC8) && event.getSource() == 0x101 && event.getKeyCode() == KeyEvent.KEYCODE_UNKNOWN)) {
             // Onyx BOOX nav back button long press
             toggleKeyboard();
             return true;
@@ -1536,7 +1566,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         }
 
         // Onyx BOOX sends nav bar back button with NO FLAG_VIRTUAL_HARD_KEY flag, with non-standard event source 0x12345678
-        if (IS_ONYX_BOOX_DEVICE && ((event.getFlags() & KeyEvent.FLAG_VIRTUAL_HARD_KEY) == 0 && event.getSource() == 0x12345678)) {
+        if (prefConfig.isCurrDeviceLikeOnyx && ((event.getFlags() & KeyEvent.FLAG_VIRTUAL_HARD_KEY) == 0 && event.getSource() == 0x12345678)) {
             return false;
         }
 
@@ -1623,7 +1653,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         }
 
         // Onyx BOOX sends nav bar back button with NO FLAG_VIRTUAL_HARD_KEY flag, with non-standard event source 0x12345678
-        if (IS_ONYX_BOOX_DEVICE && ((event.getFlags() & KeyEvent.FLAG_VIRTUAL_HARD_KEY) == 0 && event.getSource() == 0x12345678)) {
+        if (prefConfig.isCurrDeviceLikeOnyx && ((event.getFlags() & KeyEvent.FLAG_VIRTUAL_HARD_KEY) == 0 && event.getSource() == 0x12345678)) {
             return false;
         }
 
@@ -2336,7 +2366,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                                     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
 //                                    getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
                                     getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
-                                    if (IS_ONYX_BOOX_DEVICE) {
+                                    if (prefConfig.isCurrDeviceLikeOnyx) {
                                         getWindow().getDecorView().getRootView().setSystemUiVisibility(
                                                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
                                                         //                                                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
@@ -2372,7 +2402,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                                     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
 //                                    getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
                                     getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
-                                    if (IS_ONYX_BOOX_DEVICE) {
+                                    if (prefConfig.isCurrDeviceLikeOnyx) {
                                         getWindow().getDecorView().getRootView().setSystemUiVisibility(
                                                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
 //                                                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
@@ -2943,6 +2973,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             UiHelper.notifyStreamConnecting(Game.this);
 
             decoderRenderer.setRenderTarget(holder);
+            decoderRenderer.onSurfaceSizeChanged(width, height);
             conn.start(new AndroidAudioRenderer(Game.this, prefConfig.enableAudioFx),
                     decoderRenderer, Game.this);
         }
@@ -3079,7 +3110,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             hideSystemUi(2000);
         }
         else if ((visibility & View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0) {
-            if (!IS_ONYX_BOOX_DEVICE) {
+            if (!prefConfig.isCurrDeviceLikeOnyx) {
                 hideSystemUi(2000);
             }
         }

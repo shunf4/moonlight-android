@@ -3,6 +3,8 @@ package com.limelight.binding.video;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -23,18 +25,36 @@ import com.limelight.preferences.PreferenceConfiguration;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.PixelFormat;
+import android.graphics.Rect;
+import android.graphics.SurfaceTexture;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
 import android.media.MediaCodec.BufferInfo;
 import android.media.MediaCodec.CodecException;
+import android.opengl.EGL14;
+import android.opengl.EGLConfig;
+import android.opengl.EGLContext;
+import android.opengl.EGLDisplay;
+import android.opengl.EGLExt;
+import android.opengl.EGLSurface;
+import android.opengl.GLES11Ext;
+import android.opengl.GLES20;
+import android.opengl.GLUtils;
+import android.opengl.Matrix;
 import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Process;
 import android.os.SystemClock;
+import android.util.Log;
 import android.util.Range;
 import android.view.Choreographer;
+import android.view.Surface;
 import android.view.SurfaceHolder;
 
 public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements Choreographer.FrameCallback {
@@ -69,6 +89,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     private byte optimalSlicesPerFrame;
     private boolean refFrameInvalidationActive;
     private int initialWidth, initialHeight;
+    private int surfaceWidth = 300, surfaceHeight = 300;
     private int videoFormat;
     private SurfaceHolder renderTarget;
     private volatile boolean stopping;
@@ -127,6 +148,21 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     private int numVpsIn;
     private int numFramesIn;
     private int numFramesOut;
+
+    private BufferInfo currBufferInfo = null;
+
+    private final Object openEglFrameLock = new Object();
+
+    private boolean openEglFrameAvailable = false;
+    private boolean openEglFrameStopped = false;
+
+    private HandlerThread openEglThread = null;
+
+    private SurfaceTexture openEglSurfaceTexture = null;
+
+    private int[] openEglBufferHandles = new int[2];
+
+    private float[] openEglTexMatrix = new float[16];
 
     private MediaCodecInfo findAvcDecoder() {
         MediaCodecInfo decoder = MediaCodecHelper.findProbableSafeDecoder("video/avc", MediaCodecInfo.CodecProfileLevel.AVCProfileHigh);
@@ -292,6 +328,11 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
     public void setRenderTarget(SurfaceHolder renderTarget) {
         this.renderTarget = renderTarget;
+    }
+
+    public void onSurfaceSizeChanged(int width, int height) {
+        this.surfaceWidth = width;
+        this.surfaceHeight = height;
     }
 
     public MediaCodecDecoderRenderer(Activity activity, PreferenceConfiguration prefs,
@@ -473,8 +514,9 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
         // Populate keys for adaptive playback
         if (adaptivePlayback) {
-            videoFormat.setInteger(MediaFormat.KEY_MAX_WIDTH, initialWidth);
-            videoFormat.setInteger(MediaFormat.KEY_MAX_HEIGHT, initialHeight);
+//            Log.w(MediaCodecDecoderRenderer.class.getSimpleName(), "using: " + initialWidth + "x" + initialHeight);
+//            videoFormat.setInteger(MediaFormat.KEY_MAX_WIDTH, initialWidth);
+//            videoFormat.setInteger(MediaFormat.KEY_MAX_HEIGHT, initialHeight);
         }
 
         // Android 7.0 adds color options to the MediaFormat
@@ -537,7 +579,276 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
         LimeLog.info("Configuring with format: "+format);
 
-        videoDecoder.configure(format, renderTarget.getSurface(), null, 0);
+        if (prefs.isCurrDeviceLikeOnyx) {
+            openEglThread = new HandlerThread("OpenEglThread");
+            openEglThread.start();
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+
+            EGLContext[] eglContext = new EGLContext[1];
+            EGLDisplay[] eglDisplay = new EGLDisplay[1];
+            EGLSurface[] eglSurface = new EGLSurface[1];
+            Surface[] decoderOutSurface = new Surface[1];
+            int[] program = new int[1];
+
+            int[] vertexHandle = new int[1];
+            int[] uvsHandle = new int[1];
+            int[] texMatrixHandle = new int[1];
+            int[] mvpHandle = new int[1];
+            int[] samplerHandle = new int[1];
+
+            new Handler(openEglThread.getLooper()).post(() -> {
+                eglDisplay[0] = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY);
+                if (eglDisplay[0] == EGL14.EGL_NO_DISPLAY)
+                    throw new RuntimeException("eglDisplay == EGL14.EGL_NO_DISPLAY: "
+                            + GLUtils.getEGLErrorString(EGL14.eglGetError()));
+
+                int[] version = new int[2];
+                if (!EGL14.eglInitialize(eglDisplay[0], version, 0, version, 1))
+                    throw new RuntimeException("eglInitialize(): " + GLUtils.getEGLErrorString(EGL14.eglGetError()));
+
+                int[] attribList = new int[]{
+                        EGL14.EGL_RED_SIZE, 8,
+                        EGL14.EGL_GREEN_SIZE, 8,
+                        EGL14.EGL_BLUE_SIZE, 8,
+                        EGL14.EGL_ALPHA_SIZE, 8,
+                        EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
+//                EGLExt.EGL_RECORDABLE_ANDROID, 1,
+                        EGL14.EGL_NONE
+                };
+                EGLConfig[] configs = new EGLConfig[]{null};
+                int[] nConfigs = new int[1];
+                if (!EGL14.eglChooseConfig(eglDisplay[0], attribList, 0, configs, 0, configs.length, nConfigs, 0))
+                    throw new RuntimeException(GLUtils.getEGLErrorString(EGL14.eglGetError()));
+
+                int err = EGL14.eglGetError();
+                if (err != EGL14.EGL_SUCCESS)
+                    throw new RuntimeException(GLUtils.getEGLErrorString(err));
+
+                int[] ctxAttribs = new int[]{
+                        EGL14.EGL_CONTEXT_CLIENT_VERSION, 2,
+                        EGL14.EGL_NONE
+                };
+                eglContext[0] = EGL14.eglCreateContext(eglDisplay[0], configs[0], EGL14.EGL_NO_CONTEXT, ctxAttribs, 0);
+
+                err = EGL14.eglGetError();
+                if (err != EGL14.EGL_SUCCESS)
+                    throw new RuntimeException(GLUtils.getEGLErrorString(err));
+
+                int[] surfaceAttribs = new int[]{
+                        EGL14.EGL_NONE
+                };
+
+                eglSurface[0] = EGL14.eglCreateWindowSurface(eglDisplay[0], configs[0], renderTarget.getSurface(), surfaceAttribs, 0);
+
+                err = EGL14.eglGetError();
+                if (err != EGL14.EGL_SUCCESS)
+                    throw new RuntimeException(GLUtils.getEGLErrorString(err));
+
+                if (!EGL14.eglMakeCurrent(eglDisplay[0], eglSurface[0], eglSurface[0], eglContext[0]))
+                    throw new RuntimeException("eglMakeCurrent(): " + GLUtils.getEGLErrorString(EGL14.eglGetError()));
+
+                int[] textureHandles = new int[1];
+                GLES20.glGenTextures(1, textureHandles, 0);
+                GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureHandles[0]);
+
+                openEglSurfaceTexture = new SurfaceTexture(textureHandles[0]);
+
+                int vertexShader = GLES20.glCreateShader(GLES20.GL_VERTEX_SHADER);
+                GLES20.glShaderSource(vertexShader, "precision highp float;\n" +
+                        "        attribute vec3 vertexPosition;\n" +
+                        "        attribute vec2 uvs;\n" +
+                        "        varying vec2 varUvs;\n" +
+                        "        uniform mat4 texMatrix;\n" +
+                        "        uniform mat4 mvp;\n" +
+                        "      \n" +
+                        "        void main()\n" +
+                        "        {\n" +
+                        "            varUvs = (texMatrix * vec4(uvs.x, uvs.y, 0, 1.0)).xy;\n" +
+                        "            gl_Position = mvp * vec4(vertexPosition, 1.0);\n" +
+                        "        }");
+                GLES20.glCompileShader(vertexShader);
+
+                int fragmentShader = GLES20.glCreateShader(GLES20.GL_FRAGMENT_SHADER);
+                GLES20.glShaderSource(fragmentShader, "#extension GL_OES_EGL_image_external : require\n" +
+                        "        precision mediump float;\n" +
+                        "        \n" +
+                        "        varying vec2 varUvs;\n" +
+                        "        uniform samplerExternalOES texSampler;\n" +
+                        "        \n" +
+                        "        void main()\n" +
+                        "        {\n" +
+                        "            // Convert to greyscale here\n" +
+                        "            vec4 c = texture2D(texSampler, varUvs);\n" +
+                        "            float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
+                        "            gs = floor(gs * 6.0 + 0.5) / 6.0;\n" +
+                        "            gl_FragColor = vec4(gs, gs, gs, c.a);\n" +
+                        "        }");
+                GLES20.glCompileShader(fragmentShader);
+
+                program[0] = GLES20.glCreateProgram();
+                GLES20.glAttachShader(program[0], vertexShader);
+                GLES20.glAttachShader(program[0], fragmentShader);
+                GLES20.glLinkProgram(program[0]);
+
+                vertexHandle[0] = GLES20.glGetAttribLocation(program[0], "vertexPosition");
+                uvsHandle[0] = GLES20.glGetAttribLocation(program[0], "uvs");
+                texMatrixHandle[0] = GLES20.glGetUniformLocation(program[0], "texMatrix");
+                mvpHandle[0] = GLES20.glGetUniformLocation(program[0], "mvp");
+                samplerHandle[0] = GLES20.glGetUniformLocation(program[0], "texSampler");
+
+                // Initialize buffers
+                GLES20.glGenBuffers(2, openEglBufferHandles, 0);
+
+                GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, openEglBufferHandles[0]);
+
+                float[] vertices = new float[]{
+                        // x, y, z, u, v
+                        -1.0f, -1.0f, 0.0f, 0f, 0f,
+                        -1.0f, 1.0f, 0.0f, 0f, 1f,
+                        1.0f, 1.0f, 0.0f, 1f, 1f,
+                        1.0f, -1.0f, 0.0f, 1f, 0f
+                };
+
+                int[] indices = new int[]{
+                        2, 1, 0, 0, 3, 2
+                };
+
+                ByteBuffer vertexBufferRaw = ByteBuffer.allocateDirect(vertices.length * 4);
+                vertexBufferRaw.order(ByteOrder.nativeOrder());
+                FloatBuffer vertexBuffer = vertexBufferRaw.asFloatBuffer();
+                vertexBuffer.put(vertices);
+                vertexBuffer.position(0);
+
+                ByteBuffer indexBufferRaw = ByteBuffer.allocateDirect(indices.length * 4);
+                indexBufferRaw.order(ByteOrder.nativeOrder());
+                IntBuffer indexBuffer = indexBufferRaw.asIntBuffer();
+                indexBuffer.put(indices);
+                indexBuffer.position(0);
+
+                GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, vertices.length * 4, vertexBuffer, GLES20.GL_DYNAMIC_DRAW);
+
+                GLES20.glBindBuffer(GLES20.GL_ELEMENT_ARRAY_BUFFER, openEglBufferHandles[1]);
+                GLES20.glBufferData(GLES20.GL_ELEMENT_ARRAY_BUFFER, indices.length * 4, indexBuffer, GLES20.GL_DYNAMIC_DRAW);
+
+                // Init texture that will receive decoded frames
+                GLES20.glGenTextures(1, textureHandles, 0);
+                GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureHandles[0]);
+                GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MIN_FILTER,
+                        GLES20.GL_NEAREST);
+                GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MAG_FILTER,
+                        GLES20.GL_LINEAR);
+                GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_S,
+                        GLES20.GL_CLAMP_TO_EDGE);
+                GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_T,
+                        GLES20.GL_CLAMP_TO_EDGE);
+
+                // Ensure I can draw transparent stuff that overlaps properly
+                GLES20.glEnable(GLES20.GL_BLEND);
+                GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
+
+                HandlerThread frameHandlerThread = new HandlerThread("FrameHandlerThread");
+                frameHandlerThread.start();
+
+                openEglSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
+                    @Override
+                    public void onFrameAvailable(SurfaceTexture surfaceTexture) {
+                        synchronized (openEglFrameLock) {
+
+                            // New frame available before the last frame was process...we dropped some frames
+                            if (openEglFrameAvailable)
+                                Log.d(MediaCodecDecoderRenderer.class.getName(), "Frame available before the last frame was process...we dropped some frames");
+
+                            openEglFrameAvailable = true;
+                            openEglFrameLock.notifyAll();
+                        }
+                    }
+                }, new Handler(frameHandlerThread.getLooper()));
+
+                decoderOutSurface[0] = new Surface(openEglSurfaceTexture);
+            });
+
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+
+            videoDecoder.configure(format, decoderOutSurface[0], null, 0);
+
+            openEglFrameStopped = false;
+            new Handler(openEglThread.getLooper()).post(() -> {
+                while (true) {
+                    synchronized (openEglFrameLock) {
+                        while (!openEglFrameAvailable) {
+                            try {
+                                openEglFrameLock.wait(500);
+                            } catch (InterruptedException e) {
+                                throw new RuntimeException(e);
+                            }
+                            if (openEglFrameStopped) {
+                                if (eglDisplay[0] != EGL14.EGL_NO_DISPLAY) {
+                                    EGL14.eglDestroySurface(eglDisplay[0], eglSurface[0]);
+                                    EGL14.eglDestroyContext(eglDisplay[0], eglContext[0]);
+                                    EGL14.eglReleaseThread();
+                                    EGL14.eglTerminate(eglDisplay[0]);
+
+                                    eglDisplay[0] = EGL14.EGL_NO_DISPLAY;
+                                }
+
+                                decoderOutSurface[0].release();
+                                return;
+                            }
+                            if (!openEglFrameAvailable)
+                                Log.e(MediaCodecDecoderRenderer.class.getSimpleName(), "Surface frame wait timed out");
+                        }
+                        openEglFrameAvailable = false;
+                    }
+
+                    openEglSurfaceTexture.updateTexImage();
+                    openEglSurfaceTexture.getTransformMatrix(openEglTexMatrix);
+
+                    float[] mvpMatrix = new float[16];
+                    Matrix.setIdentityM(mvpMatrix, 0);
+
+                    {
+                        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
+                        GLES20.glClearColor(1f, 0f, 0f, 0f);
+
+                        GLES20.glViewport(0, 0, surfaceWidth, surfaceHeight);
+
+                        GLES20.glUseProgram(program[0]);
+
+                        // Pass transformations to shader
+                        GLES20.glUniformMatrix4fv(texMatrixHandle[0], 1, false, openEglTexMatrix, 0);
+                        GLES20.glUniformMatrix4fv(mvpHandle[0], 1, false, mvpMatrix, 0);
+
+                        // Prepare buffers with vertices and indices & draw
+                        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, openEglBufferHandles[0]);
+                        GLES20.glBindBuffer(GLES20.GL_ELEMENT_ARRAY_BUFFER, openEglBufferHandles[1]);
+
+                        GLES20.glEnableVertexAttribArray(vertexHandle[0]);
+                        GLES20.glVertexAttribPointer(vertexHandle[0], 3, GLES20.GL_FLOAT, false, 4 * 5, 0);
+
+                        GLES20.glEnableVertexAttribArray(uvsHandle[0]);
+                        GLES20.glVertexAttribPointer(uvsHandle[0], 2, GLES20.GL_FLOAT, false, 4 * 5, 3 * 4);
+
+                        GLES20.glDrawElements(GLES20.GL_TRIANGLES, 6, GLES20.GL_UNSIGNED_INT, 0);
+                    }
+
+                    if (currBufferInfo != null) {
+                        EGLExt.eglPresentationTimeANDROID(eglDisplay[0], eglSurface[0], currBufferInfo.presentationTimeUs * 1000);
+                    }
+
+                    EGL14.eglSwapBuffers(eglDisplay[0], eglSurface[0]);
+                }
+            });
+        } else {
+            videoDecoder.configure(format, renderTarget.getSurface(), null, 0);
+        }
 
         configuredFormat = format;
 
@@ -587,6 +898,10 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
             }
         } finally {
             if (!configured && videoDecoder != null) {
+                synchronized(openEglFrameLock) {
+                    openEglFrameStopped = true;
+                    openEglFrameLock.notifyAll();
+                }
                 videoDecoder.release();
                 videoDecoder = null;
             }
@@ -804,6 +1119,10 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                 // throw away the old decoder and reinitialize a new one from scratch.
                 if (codecRecoveryType.get() == CR_RECOVERY_TYPE_RESET) {
                     LimeLog.warning("Trying to recreate decoder after CodecException");
+                    synchronized(openEglFrameLock) {
+                        openEglFrameStopped = true;
+                        openEglFrameLock.notifyAll();
+                    }
                     videoDecoder.release();
 
                     try {
@@ -1054,6 +1373,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                     try {
                         // Try to output a frame
                         int outIndex = videoDecoder.dequeueOutputBuffer(info, 50000);
+                        currBufferInfo = info;
                         if (outIndex >= 0) {
                             long presentationTimeUs = info.presentationTimeUs;
                             int lastIndex = outIndex;
@@ -1243,6 +1563,11 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
             rendererThread.interrupt();
         }
 
+        synchronized(openEglFrameLock) {
+            openEglFrameStopped = true;
+            openEglFrameLock.notifyAll();
+        }
+
         // Stop any active codec recovery operations
         synchronized (codecRecoveryMonitor) {
             codecRecoveryType.set(CR_RECOVERY_TYPE_NONE);
@@ -1298,6 +1623,10 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
     @Override
     public void cleanup() {
+        synchronized(openEglFrameLock) {
+            openEglFrameStopped = true;
+            openEglFrameLock.notifyAll();
+        }
         videoDecoder.release();
     }
 

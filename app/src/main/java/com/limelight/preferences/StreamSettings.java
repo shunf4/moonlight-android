@@ -27,6 +27,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 
+import com.limelight.Game;
 import com.limelight.LimeLog;
 import com.limelight.PcView;
 import com.limelight.R;
@@ -276,6 +277,9 @@ public class StreamSettings extends Activity {
 
             addPreferencesFromResource(R.xml.preferences);
             PreferenceScreen screen = getPreferenceScreen();
+
+            ((CheckBoxPreference) findPreference("is_curr_device_like_onyx")).setDefaultValue(Game.IS_ONYX_BOOX_DEVICE);
+            ((CheckBoxPreference) findPreference("is_curr_device_like_onyx")).setChecked(PreferenceConfiguration.readPreferences(this.getActivity()).isCurrDeviceLikeOnyx);
 
             // hide on-screen controls category on non touch screen devices
             if (!getActivity().getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)) {

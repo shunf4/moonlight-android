@@ -2,11 +2,13 @@ package com.limelight.binding.input.touch;
 
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
+import android.graphics.Rect;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.MutableBoolean;
 import android.util.Pair;
@@ -15,6 +17,7 @@ import android.view.View;
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.input.MouseButtonPacket;
 import com.limelight.preferences.PreferenceConfiguration;
+import com.limelight.ui.StreamView;
 
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -348,8 +351,9 @@ public class RelativeTouchContext implements TouchContext {
     public boolean touchDownEvent(int eventX, int eventY, int xRel, int yRel, long eventTime, boolean isNewFinger)
     {
         // Get the view dimensions to scale inputs on this touch
-        xFactor = referenceWidth / (double)targetView.getWidth();
-        yFactor = referenceHeight / (double)targetView.getHeight();
+        Rect rect = ((StreamView) targetView).getSimulatedInitialRectFromAspectRatio();
+        xFactor = referenceWidth / ((double) rect.right);
+        yFactor = referenceHeight / ((double) rect.bottom);
 
         originalTouchX = lastTouchX = eventX;
         originalTouchY = lastTouchY = eventY;
