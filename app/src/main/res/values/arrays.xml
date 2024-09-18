@@ -5,8 +5,9 @@
         <item>@string/resolution_480p</item>
         <item>@string/resolution_720p</item>
         <item>@string/resolution_1080p</item>
-        <item>@string/resolution_1440p</item>
-        <item>@string/resolution_4k</item>
+        <item>1984x1120 (Onyx Max?)</item>
+        <item>1440p (Onyx Not Support?)</item>
+        <item>4k (Onyx Not Support)</item>
     </string-array>
 
     <!-- Keep this in sync with PreferenceConfiguration.isNativeResolution()! -->
@@ -15,6 +16,7 @@
         <item>854x480</item>
         <item>1280x720</item>
         <item>1920x1080</item>
+        <item>1984x1120</item>
         <item>2560x1440</item>
         <item>3840x2160</item>
     </string-array>

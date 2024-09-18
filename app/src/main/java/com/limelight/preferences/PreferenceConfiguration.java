@@ -192,6 +192,9 @@ public class PreferenceConfiguration {
         else if (width == 2560 && height == 1440) {
             return false;
         }
+        else if (width == 1984 && height == 1120) {
+            return false;
+        }
         else if (width == 3840 && height == 2160) {
             return false;
         }
@@ -270,6 +273,8 @@ public class PreferenceConfiguration {
                 return RES_1080P;
             case 1440:
                 return RES_1440P;
+            case 1120:
+                return "1984x1120";
             case 2160:
                 return RES_4K;
         }

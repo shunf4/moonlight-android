@@ -99,6 +99,8 @@ public class StreamView extends SurfaceView {
         }
 
         setMeasuredDimension(measuredWidth, measuredHeight);
+        setPivotX((float) measuredWidth / 2);
+        setPivotY((float) measuredHeight / 2);
     }
 
     @Override

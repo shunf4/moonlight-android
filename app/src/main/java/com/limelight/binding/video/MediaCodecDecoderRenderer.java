@@ -684,7 +684,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                         "            // Convert to greyscale here\n" +
                         "            vec4 c = texture2D(texSampler, varUvs);\n" +
                         "            float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
-                        "            gs = floor(gs * 6.0 + 0.5) / 6.0;\n" +
+                        "            gs = floor(gs * 8.0 + 0.5) / 8.0;\n" +
                         "            gl_FragColor = vec4(gs, gs, gs, c.a);\n" +
                         "        }");
                 GLES20.glCompileShader(fragmentShader);

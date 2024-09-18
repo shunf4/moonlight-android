@@ -84,6 +84,7 @@ import android.view.View;
 import android.view.View.OnGenericMotionListener;
 import android.view.View.OnSystemUiVisibilityChangeListener;
 import android.view.View.OnTouchListener;
+import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.WindowManager;
@@ -934,7 +935,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             }
             else {
                 touchContextMap[i] = new RelativeTouchContext(conn, i,
-                        REFERENCE_HORIZ_RES, REFERENCE_VERT_RES,
+                        REFERENCE_HORIZ_RES / (prefConfig.isCurrDeviceLikeOnyx ? 2 : 1), REFERENCE_VERT_RES / (prefConfig.isCurrDeviceLikeOnyx ? 2 : 1),
                         streamView,
                         prefConfig,
                         backgroundTouchView.getWidth(),
@@ -1169,8 +1170,15 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         else {
             // Set the surface to scale based on the aspect ratio of the stream
             streamView.setDesiredAspectRatio((double)prefConfig.width / (double)prefConfig.height);
-
-            streamView.setLayoutParams(new FrameLayout.LayoutParams(prefConfig.width, prefConfig.height));
+            ViewGroup.LayoutParams lp = streamView.getLayoutParams();
+            if (prefConfig.isCurrDeviceLikeOnyx) {
+                lp.width = prefConfig.width;
+                lp.height = prefConfig.height;
+            } else {
+                lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+                lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+            }
+            streamView.setLayoutParams(lp);
         }
 
         // Set the desired refresh rate that will get passed into setFrameRate() later
@@ -1554,7 +1562,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
     @Override
     public boolean handleKeyDown(KeyEvent event) {
-        if (prefConfig.isCurrDeviceLikeOnyx && ((event.getFlags() == 0xC8) && event.getSource() == 0x101 && event.getKeyCode() == KeyEvent.KEYCODE_UNKNOWN)) {
+        if (prefConfig.isCurrDeviceLikeOnyx && ((event.getFlags() == 0xC8) && event.getSource() == 0x101 && (event.getKeyCode() == KeyEvent.KEYCODE_UNKNOWN || event.getKeyCode() == KeyEvent.KEYCODE_BACK))) {
             // Onyx BOOX nav back button long press
             toggleKeyboard();
             return true;
