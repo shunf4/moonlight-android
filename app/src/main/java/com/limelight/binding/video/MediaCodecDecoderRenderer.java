@@ -683,9 +683,25 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                         "        {\n" +
                         "            // Convert to greyscale here\n" +
                         "            vec4 c = texture2D(texSampler, varUvs);\n" +
-                        "            float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
-                        "            gs = floor(gs * 8.0 + 0.5) / 8.0;\n" +
-                        "            gl_FragColor = vec4(gs, gs, gs, c.a);\n" +
+                        "            float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;" +
+                        "            float i1 = floor(varUvs.x * 1984.0);\n" +
+                        "            i1 = i1 - (3.0 * floor(i1 / 3.0));\n" +
+                        "            int umod3 = int(i1);\n" +
+                        "            i1 = floor(varUvs.y * 1120.0);\n" +
+                        "            i1 = i1 - (3.0 * floor(i1 / 3.0));\n" +
+                        "            int vmod3 = int(i1);\n" +
+                        "            gs = floor(gs * 8.0 + 0.5);\n" +
+                        "            float gs2 = gs;\n" +
+                        "            gs2 = (gs < 1.0) ? (0.0) :" +
+                        "               (gs < 2.0) ? ((umod3 == 1 && vmod3 == 1) ? 1.0 : 0.0) :\n" +
+                        "               (gs < 3.0) ? ((umod3 == 2 && vmod3 == 1 || umod3 == 1 && vmod3 == 2) ? 1.0 : 0.0) :\n" +
+                        "               (gs < 4.0) ? ((umod3 == 0 && vmod3 == 0 || umod3 == 1 && vmod3 == 2 || umod3 == 2 && vmod3 == 0) ? 1.0 : 0.0) :\n" +
+                        "               (gs < 5.0) ? ((umod3 == 1 && vmod3 == 0 || umod3 == 0 && vmod3 == 1 || umod3 == 1 && vmod3 == 2 || umod3 == 2 && vmod3 == 1) ? 1.0 : 0.0) :\n" +
+                        "               (gs < 6.0) ? (!((umod3 == 1 && vmod3 == 0 || umod3 == 0 && vmod3 == 1 || umod3 == 1 && vmod3 == 2 || umod3 == 2 && vmod3 == 1)) ? 1.0 : 0.0) :\n" +
+                        "               (gs < 6.0) ? (!((umod3 == 1 && vmod3 == 0 || umod3 == 0 && vmod3 == 2)) ? 1.0 : 0.0) :\n" +
+                        "               (gs < 7.0) ? (!((umod3 == 1 && vmod3 == 1)) ? 1.0 : 0.0) :\n" +
+                        "               1.0;\n" +
+                        "            gl_FragColor = vec4(gs2, gs2, gs2, c.a);\n" +
                         "        }");
                 GLES20.glCompileShader(fragmentShader);
 
