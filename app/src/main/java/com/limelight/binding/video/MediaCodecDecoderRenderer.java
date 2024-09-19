@@ -579,7 +579,16 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
         LimeLog.info("Configuring with format: "+format);
 
-        if (prefs.isCurrDeviceLikeOnyx) {
+        if ((
+                prefs.shouldUseShader1 ||
+                        prefs.shouldUseShader2 ||
+                        prefs.shouldUseShader3 ||
+                        prefs.shouldUseShader4 ||
+                        prefs.shouldUseShader5 ||
+                        prefs.shouldUseShader6 ||
+                        prefs.shouldUseShader7 ||
+                        prefs.shouldUseShader8
+        )) {
             openEglThread = new HandlerThread("OpenEglThread");
             openEglThread.start();
             try {
@@ -673,7 +682,10 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                 GLES20.glCompileShader(vertexShader);
 
                 int fragmentShader = GLES20.glCreateShader(GLES20.GL_FRAGMENT_SHADER);
-                GLES20.glShaderSource(fragmentShader, "#extension GL_OES_EGL_image_external : require\n" +
+                String fragmentShaderSource = null;
+                
+                if (prefs.shouldUseShader1) {
+                    fragmentShaderSource = "#extension GL_OES_EGL_image_external : require\n" +
                         "        precision mediump float;\n" +
                         "        \n" +
                         "        varying vec2 varUvs;\n" +
@@ -683,26 +695,368 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                         "        {\n" +
                         "            // Convert to greyscale here\n" +
                         "            vec4 c = texture2D(texSampler, varUvs);\n" +
-                        "            float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;" +
-                        "            float i1 = floor(varUvs.x * 1984.0);\n" +
-                        "            i1 = i1 - (3.0 * floor(i1 / 3.0));\n" +
-                        "            int umod3 = int(i1);\n" +
-                        "            i1 = floor(varUvs.y * 1120.0);\n" +
-                        "            i1 = i1 - (3.0 * floor(i1 / 3.0));\n" +
-                        "            int vmod3 = int(i1);\n" +
-                        "            gs = floor(gs * 8.0 + 0.5);\n" +
-                        "            float gs2 = gs;\n" +
-                        "            gs2 = (gs < 1.0) ? (0.0) :" +
-                        "               (gs < 2.0) ? ((umod3 == 1 && vmod3 == 1) ? 1.0 : 0.0) :\n" +
-                        "               (gs < 3.0) ? ((umod3 == 2 && vmod3 == 1 || umod3 == 1 && vmod3 == 2) ? 1.0 : 0.0) :\n" +
-                        "               (gs < 4.0) ? ((umod3 == 0 && vmod3 == 0 || umod3 == 1 && vmod3 == 2 || umod3 == 2 && vmod3 == 0) ? 1.0 : 0.0) :\n" +
-                        "               (gs < 5.0) ? ((umod3 == 1 && vmod3 == 0 || umod3 == 0 && vmod3 == 1 || umod3 == 1 && vmod3 == 2 || umod3 == 2 && vmod3 == 1) ? 1.0 : 0.0) :\n" +
-                        "               (gs < 6.0) ? (!((umod3 == 1 && vmod3 == 0 || umod3 == 0 && vmod3 == 1 || umod3 == 1 && vmod3 == 2 || umod3 == 2 && vmod3 == 1)) ? 1.0 : 0.0) :\n" +
-                        "               (gs < 6.0) ? (!((umod3 == 1 && vmod3 == 0 || umod3 == 0 && vmod3 == 2)) ? 1.0 : 0.0) :\n" +
-                        "               (gs < 7.0) ? (!((umod3 == 1 && vmod3 == 1)) ? 1.0 : 0.0) :\n" +
-                        "               1.0;\n" +
-                        "            gl_FragColor = vec4(gs2, gs2, gs2, c.a);\n" +
-                        "        }");
+                        "            float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
+                        "            gs = floor(gs * 8.0 + 0.5) / 8.0;\n" +
+                        "            gl_FragColor = vec4(gs, gs, gs, c.a);\n" +
+                        "        }";
+                }
+
+                if (prefs.shouldUseShader2) {
+                    fragmentShaderSource = "#extension GL_OES_EGL_image_external : require\n" +
+                            "precision mediump float;\n" +
+                            "\n" +
+                            "varying vec2 varUvs;\n" +
+                            "uniform samplerExternalOES texSampler;\n" +
+                            "\n" +
+                            "void main()\n" +
+                            "{\n" +
+                            "        // Convert to greyscale here\n" +
+                            "        vec4 c = texture2D(texSampler, varUvs);\n" +
+                            "        float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
+                            "        float i1 = floor(varUvs.x * 1984.0);\n" +
+                            "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
+                            "        int umod6 = int(i1);\n" +
+                            "        i1 = floor(varUvs.y * 1120.0);\n" +
+                            "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
+                            "        int vmod6 = int(i1);\n" +
+                            // "        gs = atan(24.0 * (gs - 0.46)) / 3.14159 * 1.07 + 0.5;\n" +
+                            "        gs = floor(gs * 8.0 + 0.5);\n" +
+                            "        float gs2 = gs;\n" +
+                            "\n" +
+                            "        gs2 = (gs < 4.0) ? (\n" +
+                            "                (gs < 2.0) ? (\n" +
+                            "                        (gs < 1.0) ?\n" +
+                            "                                (0.0) :\n" +
+                            "                                (((umod6 == 3) && (vmod6 == 3)) ? 1.0 : 0.0)\n" +
+                            "                ) : (\n" +
+                            "                        (gs < 3.0) ?\n" +
+                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
+                            "                                (((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
+                            "                )\n" +
+                            "        ) : (\n" +
+                            "                (gs < 6.0) ? (\n" +
+                            "                        (gs < 5.0) ?\n" +
+                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 0 || vmod6 == 3) || (umod6 == 0 || umod6 == 3) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5) || (umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
+                            // "                                (!(((umod6 == 1 || umod6 == 4) && (vmod6 == 0 || vmod6 == 3) || (umod6 == 0 || umod6 == 3) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5) || (umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4))) ? 1.0 : 0.0)\n" +
+                            "                                (!((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
+                            "                ) : (\n" +
+                            "                        (gs < 7.0) ?\n" +
+                            "                                (!(((umod6 == 1 || umod6 == 4) && (vmod6 == 1 || vmod6 == 4))) ? 1.0 : 0.0) :\n" +
+                            "                                1.0\n" +
+                            "                )\n" +
+                            "        );\n" +
+                            "\n" +
+                            "        gl_FragColor = vec4(gs2, gs2, gs2, c.a);\n" +
+                            "}\n" +
+                            "\n";
+
+                }
+
+                if (prefs.shouldUseShader3) {
+
+                    fragmentShaderSource = "#extension GL_OES_EGL_image_external : require\n" +
+                            "precision mediump float;\n" +
+                            "\n" +
+                            "varying vec2 varUvs;\n" +
+                            "uniform samplerExternalOES texSampler;\n" +
+                            "\n" +
+                            "void main()\n" +
+                            "{\n" +
+                            "        // Convert to greyscale here\n" +
+                            "        vec4 c = texture2D(texSampler, varUvs);\n" +
+                            "        float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
+                            "        float i1 = floor(varUvs.x * 1984.0);\n" +
+                            "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
+                            "        int umod6 = int(i1);\n" +
+                            "        i1 = floor(varUvs.y * 1120.0);\n" +
+                            "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
+                            "        int vmod6 = int(i1);\n" +
+                             "        gs = atan(25.0 * (gs - 0.46)) / 3.14159 * 1.07 + 0.5;\n" +
+                            "        gs = floor(gs * 8.0 + 0.5);\n" +
+                            "        float gs2 = gs;\n" +
+                            "\n" +
+                            "        gs2 = (gs < 4.0) ? (\n" +
+                            "                (gs < 2.0) ? (\n" +
+                            "                        (gs < 1.0) ?\n" +
+                            "                                (0.0) :\n" +
+                            "                                (((umod6 == 3) && (vmod6 == 3)) ? 1.0 : 0.0)\n" +
+                            "                ) : (\n" +
+                            "                        (gs < 3.0) ?\n" +
+                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
+                            "                                (((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
+                            "                )\n" +
+                            "        ) : (\n" +
+                            "                (gs < 6.0) ? (\n" +
+                            "                        (gs < 5.0) ?\n" +
+                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 0 || vmod6 == 3) || (umod6 == 0 || umod6 == 3) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5) || (umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
+                            // "                                (!(((umod6 == 1 || umod6 == 4) && (vmod6 == 0 || vmod6 == 3) || (umod6 == 0 || umod6 == 3) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5) || (umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4))) ? 1.0 : 0.0)\n" +
+                            "                                (!((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
+                            "                ) : (\n" +
+                            "                        (gs < 7.0) ?\n" +
+                            "                                (!(((umod6 == 1) && (vmod6 == 5))) ? 1.0 : 0.0) :\n" +
+                            "                                1.0\n" +
+                            "                )\n" +
+                            "        );\n" +
+                            "\n" +
+                            "        gl_FragColor = vec4(gs2, gs2, gs2, c.a);\n" +
+                            "}\n" +
+                            "\n";
+
+                }
+
+                if (prefs.shouldUseShader4) {
+                    fragmentShaderSource = "#extension GL_OES_EGL_image_external : require\n" +
+                            "precision mediump float;\n" +
+                            "\n" +
+                            "varying vec2 varUvs;\n" +
+                            "uniform samplerExternalOES texSampler;\n" +
+                            "\n" +
+                            "void main()\n" +
+                            "{\n" +
+                            "        // Convert to greyscale here\n" +
+                            "        vec4 c = texture2D(texSampler, varUvs);\n" +
+                            "        float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
+                            "        float i1 = floor(varUvs.x * 1984.0);\n" +
+                            "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
+                            "        int umod6 = int(i1);\n" +
+                            "        i1 = floor(varUvs.y * 1120.0);\n" +
+                            "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
+                            "        int vmod6 = int(i1);\n" +
+                            "        gs = atan(21.0 * (gs - 0.48)) / 3.14159 * 1.07 + 0.5;\n" +
+                            "        gs = floor(gs * 8.0 + 0.5);\n" +
+                            "        float gs2 = gs;\n" +
+                            "\n" +
+                            "        gs2 = (gs < 4.0) ? (\n" +
+                            "                (gs < 2.0) ? (\n" +
+                            "                        (gs < 1.0) ?\n" +
+                            "                                (0.0) :\n" +
+                            "                                (((umod6 == 3) && (vmod6 == 3)) ? 1.0 : 0.0)\n" +
+                            "                ) : (\n" +
+                            "                        (gs < 3.0) ?\n" +
+                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
+                            "                                (((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
+                            "                )\n" +
+                            "        ) : (\n" +
+                            "                (gs < 6.0) ? (\n" +
+                            "                        (gs < 5.0) ?\n" +
+                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 0 || vmod6 == 3) || (umod6 == 0 || umod6 == 3) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5) || (umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
+                            // "                                (!(((umod6 == 1 || umod6 == 4) && (vmod6 == 0 || vmod6 == 3) || (umod6 == 0 || umod6 == 3) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5) || (umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4))) ? 1.0 : 0.0)\n" +
+                            "                                (!((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
+                            "                ) : (\n" +
+                            "                        (gs < 7.0) ?\n" +
+                            "                                (!(((umod6 == 1) && (vmod6 == 5))) ? 1.0 : 0.0) :\n" +
+                            "                                1.0\n" +
+                            "                )\n" +
+                            "        );\n" +
+                            "\n" +
+                            "        gl_FragColor = vec4(gs2, gs2, gs2, c.a);\n" +
+                            "}\n" +
+                            "\n";
+
+                }
+
+                if (prefs.shouldUseShader5) {
+                    fragmentShaderSource = "#extension GL_OES_EGL_image_external : require\n" +
+                            "precision mediump float;\n" +
+                            "\n" +
+                            "varying vec2 varUvs;\n" +
+                            "uniform samplerExternalOES texSampler;\n" +
+                            "\n" +
+                            "void main()\n" +
+                            "{\n" +
+                            "        // Convert to greyscale here\n" +
+                            "        vec4 c = texture2D(texSampler, varUvs);\n" +
+                            "        float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
+                            "        float i1 = floor(varUvs.x * 1984.0);\n" +
+                            "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
+                            "        int umod6 = int(i1);\n" +
+                            "        i1 = floor(varUvs.y * 1120.0);\n" +
+                            "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
+                            "        int vmod6 = int(i1);\n" +
+                            "        gs = atan(19.0 * (gs - 0.49)) / 3.14159 * 1.07 + 0.5;\n" +
+                            "        gs = floor(gs * 8.0 + 0.5);\n" +
+                            "        float gs2 = gs;\n" +
+                            "\n" +
+                            "        gs2 = (gs < 4.0) ? (\n" +
+                            "                (gs < 2.0) ? (\n" +
+                            "                        (gs < 1.0) ?\n" +
+                            "                                (0.0) :\n" +
+                            "                                (((umod6 == 3) && (vmod6 == 3)) ? 1.0 : 0.0)\n" +
+                            "                ) : (\n" +
+                            "                        (gs < 3.0) ?\n" +
+                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
+                            "                                (((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
+                            "                )\n" +
+                            "        ) : (\n" +
+                            "                (gs < 6.0) ? (\n" +
+                            "                        (gs < 5.0) ?\n" +
+                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 0 || vmod6 == 3) || (umod6 == 0 || umod6 == 3) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5) || (umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
+                            // "                                (!(((umod6 == 1 || umod6 == 4) && (vmod6 == 0 || vmod6 == 3) || (umod6 == 0 || umod6 == 3) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5) || (umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4))) ? 1.0 : 0.0)\n" +
+                            "                                (!((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
+                            "                ) : (\n" +
+                            "                        (gs < 7.0) ?\n" +
+                            "                                (!(((umod6 == 1 || umod6 == 4) && (vmod6 == 1 || vmod6 == 4))) ? 1.0 : 0.0) :\n" +
+                            "                                1.0\n" +
+                            "                )\n" +
+                            "        );\n" +
+                            "\n" +
+                            "        gl_FragColor = vec4(gs2, gs2, gs2, c.a);\n" +
+                            "}\n" +
+                            "\n";
+                }
+
+                if (prefs.shouldUseShader6) {
+
+                    fragmentShaderSource = "#extension GL_OES_EGL_image_external : require\n" +
+                            "precision mediump float;\n" +
+                            "\n" +
+                            "varying vec2 varUvs;\n" +
+                            "uniform samplerExternalOES texSampler;\n" +
+                            "\n" +
+                            "void main()\n" +
+                            "{\n" +
+                            "        // Convert to greyscale here\n" +
+                            "        vec4 c = texture2D(texSampler, varUvs);\n" +
+                            "        float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
+                            "        float i1 = floor(varUvs.x * 1984.0);\n" +
+                            "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
+                            "        int umod6 = int(i1);\n" +
+                            "        i1 = floor(varUvs.y * 1120.0);\n" +
+                            "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
+                            "        int vmod6 = int(i1);\n" +
+                            "        gs = atan(6.8 * (gs - 0.5)) / 3.14159 * 1.04 + 0.5;\n" +
+                            "        gs = floor(gs * 8.0 + 0.5);\n" +
+                            "        float gs2 = gs;\n" +
+                            "\n" +
+                            "        gs2 = (gs < 4.0) ? (\n" +
+                            "                (gs < 2.0) ? (\n" +
+                            "                        (gs < 1.0) ?\n" +
+                            "                                (0.0) :\n" +
+                            "                                (((umod6 == 3) && (vmod6 == 3)) ? 1.0 : 0.0)\n" +
+                            "                ) : (\n" +
+                            "                        (gs < 3.0) ?\n" +
+                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
+                            "                                (((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
+                            "                )\n" +
+                            "        ) : (\n" +
+                            "                (gs < 6.0) ? (\n" +
+                            "                        (gs < 5.0) ?\n" +
+                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 0 || vmod6 == 3) || (umod6 == 0 || umod6 == 3) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5) || (umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
+                            // "                                (!(((umod6 == 1 || umod6 == 4) && (vmod6 == 0 || vmod6 == 3) || (umod6 == 0 || umod6 == 3) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5) || (umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4))) ? 1.0 : 0.0)\n" +
+                            "                                (!((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
+                            "                ) : (\n" +
+                            "                        (gs < 7.0) ?\n" +
+                            "                                (!(((umod6 == 1 || umod6 == 4) && (vmod6 == 1 || vmod6 == 4))) ? 1.0 : 0.0) :\n" +
+                            "                                1.0\n" +
+                            "                )\n" +
+                            "        );\n" +
+                            "\n" +
+                            "        gl_FragColor = vec4(gs2, gs2, gs2, c.a);\n" +
+                            "}\n" +
+                            "\n";
+                }
+
+                if (prefs.shouldUseShader7) {
+                    fragmentShaderSource = "#extension GL_OES_EGL_image_external : require\n" +
+                            "precision mediump float;\n" +
+                            "\n" +
+                            "varying vec2 varUvs;\n" +
+                            "uniform samplerExternalOES texSampler;\n" +
+                            "\n" +
+                            "void main()\n" +
+                            "{\n" +
+                            "        // Convert to greyscale here\n" +
+                            "        vec4 c = texture2D(texSampler, varUvs);\n" +
+                            "        float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
+                            "        float i1 = floor(varUvs.x * 1984.0);\n" +
+                            "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
+                            "        int umod6 = int(i1);\n" +
+                            "        i1 = floor(varUvs.y * 1120.0);\n" +
+                            "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
+                            "        int vmod6 = int(i1);\n" +
+                            "        gs = atan(18.0 * (gs - 0.54)) / 3.14159 * 1.07 + 0.5;\n" +
+                            "        gs = floor(gs * 8.0 + 0.5);\n" +
+                            "        float gs2 = gs;\n" +
+                            "\n" +
+                            "        gs2 = (gs < 4.0) ? (\n" +
+                            "                (gs < 2.0) ? (\n" +
+                            "                        (gs < 1.0) ?\n" +
+                            "                                (0.0) :\n" +
+                            "                                (((umod6 == 3) && (vmod6 == 3)) ? 1.0 : 0.0)\n" +
+                            "                ) : (\n" +
+                            "                        (gs < 3.0) ?\n" +
+                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
+                            "                                (((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
+                            "                )\n" +
+                            "        ) : (\n" +
+                            "                (gs < 6.0) ? (\n" +
+                            "                        (gs < 5.0) ?\n" +
+                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 0 || vmod6 == 3) || (umod6 == 0 || umod6 == 3) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5) || (umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
+                            // "                                (!(((umod6 == 1 || umod6 == 4) && (vmod6 == 0 || vmod6 == 3) || (umod6 == 0 || umod6 == 3) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5) || (umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4))) ? 1.0 : 0.0)\n" +
+                            "                                (!((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
+                            "                ) : (\n" +
+                            "                        (gs < 7.0) ?\n" +
+                            "                                (!(((umod6 == 1) && (vmod6 == 5))) ? 1.0 : 0.0) :\n" +
+                            "                                1.0\n" +
+                            "                )\n" +
+                            "        );\n" +
+                            "\n" +
+                            "        gl_FragColor = vec4(gs2, gs2, gs2, c.a);\n" +
+                            "}\n" +
+                            "\n";
+                }
+
+                if (prefs.shouldUseShader8) {
+                    fragmentShaderSource = "#extension GL_OES_EGL_image_external : require\n" +
+                            "precision mediump float;\n" +
+                            "\n" +
+                            "varying vec2 varUvs;\n" +
+                            "uniform samplerExternalOES texSampler;\n" +
+                            "\n" +
+                            "void main()\n" +
+                            "{\n" +
+                            "        // Convert to greyscale here\n" +
+                            "        vec4 c = texture2D(texSampler, varUvs);\n" +
+                            "        float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
+                            "        float i1 = floor(varUvs.x * 1984.0);\n" +
+                            "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
+                            "        int umod6 = int(i1);\n" +
+                            "        i1 = floor(varUvs.y * 1120.0);\n" +
+                            "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
+                            "        int vmod6 = int(i1);\n" +
+                            "        gs = atan(24.0 * (gs - 0.56)) / 3.14159 * 1.07 + 0.5;\n" +
+                            "        gs = floor(gs * 8.0 + 0.5);\n" +
+                            "        float gs2 = gs;\n" +
+                            "\n" +
+                            "        gs2 = (gs < 4.0) ? (\n" +
+                            "                (gs < 2.0) ? (\n" +
+                            "                        (gs < 1.0) ?\n" +
+                            "                                (0.0) :\n" +
+                            "                                (((umod6 == 3) && (vmod6 == 3)) ? 1.0 : 0.0)\n" +
+                            "                ) : (\n" +
+                            "                        (gs < 3.0) ?\n" +
+                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
+                            "                                (((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
+                            "                )\n" +
+                            "        ) : (\n" +
+                            "                (gs < 6.0) ? (\n" +
+                            "                        (gs < 5.0) ?\n" +
+                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 0 || vmod6 == 3) || (umod6 == 0 || umod6 == 3) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5) || (umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
+                            // "                                (!(((umod6 == 1 || umod6 == 4) && (vmod6 == 0 || vmod6 == 3) || (umod6 == 0 || umod6 == 3) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5) || (umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4))) ? 1.0 : 0.0)\n" +
+                            "                                (!((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
+                            "                ) : (\n" +
+                            "                        (gs < 7.0) ?\n" +
+                            "                                (!(((umod6 == 1) && (vmod6 == 5))) ? 1.0 : 0.0) :\n" +
+                            "                                1.0\n" +
+                            "                )\n" +
+                            "        );\n" +
+                            "\n" +
+                            "        gl_FragColor = vec4(gs2, gs2, gs2, c.a);\n" +
+                            "}\n" +
+                            "\n";
+                }
+
+                GLES20.glShaderSource(fragmentShader, fragmentShaderSource);
                 GLES20.glCompileShader(fragmentShader);
 
                 program[0] = GLES20.glCreateProgram();

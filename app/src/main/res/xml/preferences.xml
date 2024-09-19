@@ -159,6 +159,38 @@
             android:title="is_curr_device_like_onyx"
             android:summary="is_curr_device_like_onyx"/>
         <CheckBoxPreference
+            android:key="should_use_shader_1"
+            android:title="should_use_shader_1"
+            android:summary="should_use_shader_1"/>
+        <CheckBoxPreference
+            android:key="should_use_shader_2"
+            android:title="should_use_shader_2"
+            android:summary="should_use_shader_2"/>
+        <CheckBoxPreference
+            android:key="should_use_shader_3"
+            android:title="should_use_shader_3"
+            android:summary="should_use_shader_3"/>
+        <CheckBoxPreference
+            android:key="should_use_shader_4"
+            android:title="should_use_shader_4"
+            android:summary="should_use_shader_4"/>
+        <CheckBoxPreference
+            android:key="should_use_shader_5"
+            android:title="should_use_shader_5"
+            android:summary="should_use_shader_5"/>
+        <CheckBoxPreference
+            android:key="should_use_shader_6"
+            android:title="should_use_shader_6"
+            android:summary="should_use_shader_6"/>
+        <CheckBoxPreference
+            android:key="should_use_shader_7"
+            android:title="should_use_shader_7"
+            android:summary="should_use_shader_7"/>
+        <CheckBoxPreference
+            android:key="should_use_shader_8"
+            android:title="should_use_shader_8"
+            android:summary="should_use_shader_8"/>
+        <CheckBoxPreference
             android:key="absolute_touch_tap_only_places_mouse"
             android:title="absolute_touch_tap_only_places_mouse"
             android:summary="absolute_touch_tap_only_places_mouse"

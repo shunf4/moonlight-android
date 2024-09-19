@@ -1171,7 +1171,16 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             // Set the surface to scale based on the aspect ratio of the stream
             streamView.setDesiredAspectRatio((double)prefConfig.width / (double)prefConfig.height);
             ViewGroup.LayoutParams lp = streamView.getLayoutParams();
-            if (prefConfig.isCurrDeviceLikeOnyx) {
+            if ((
+                prefConfig.shouldUseShader1 ||
+                prefConfig.shouldUseShader2 ||
+                prefConfig.shouldUseShader3 ||
+                prefConfig.shouldUseShader4 ||
+                prefConfig.shouldUseShader5 ||
+                prefConfig.shouldUseShader6 ||
+                prefConfig.shouldUseShader7 ||
+                prefConfig.shouldUseShader8
+            )) {
                 lp.width = prefConfig.width;
                 lp.height = prefConfig.height;
             } else {
