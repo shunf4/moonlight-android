@@ -1684,6 +1684,10 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
             return false;
         }
 
+        if (prefConfig.shouldDisableControl) {
+            return false;
+        }
+
         // Only get a context if one already exists. We want to ensure we don't report non-gamepads.
         InputDeviceContext context = inputDeviceContexts.get(event.getDeviceId());
         if (context == null) {

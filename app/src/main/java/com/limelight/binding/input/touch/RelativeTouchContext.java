@@ -367,7 +367,7 @@ public class RelativeTouchContext implements TouchContext {
             cancelled = confirmedDrag = confirmedHold = confirmedMove = confirmedScroll = confirmedDoubleClickDragTransform = false;
             confirmedScaleTranslateSetter.accept(false);
             distanceMoved = 0;
-            doubleFingerInitialSpacingSetter.accept(100.0d);
+            doubleFingerInitialSpacingSetter.accept(Double.NaN);
             isPinchZoomTimedOut = false;
 
             if (actionIndex == 0) {
@@ -433,12 +433,21 @@ public class RelativeTouchContext implements TouchContext {
 
             int frameTranslateX = midpointX - doubleFingerInitialMidpointXGetter.get();
             int frameTranslateY = midpointY - doubleFingerInitialMidpointYGetter.get();
-            double zoomFactor = spacing / doubleFingerInitialSpacingGetter.get();
-            if (zoomFactor < 0.02d) {
-                zoomFactor = 0.02d;
-            }
-            if (zoomFactor > 30.0d) {
-                zoomFactor = 30.0d;
+            double doubleFingerInitialSpacing = doubleFingerInitialSpacingGetter.get();
+            double zoomFactor;
+            if (Double.isNaN(doubleFingerInitialSpacing)) {
+                zoomFactor = 1.0d;
+            } else {
+                zoomFactor = spacing / doubleFingerInitialSpacing;
+                if (!Double.isFinite(zoomFactor)) {
+                    zoomFactor = 1.0d;
+                }
+                if (zoomFactor < 0.02d) {
+                    zoomFactor = 0.02d;
+                }
+                if (zoomFactor > 30.0d) {
+                    zoomFactor = 30.0d;
+                }
             }
             scaleTransformCallback.report(frameTranslateX, frameTranslateY, zoomFactor, true);
             cancelTouch();
@@ -676,7 +685,8 @@ public class RelativeTouchContext implements TouchContext {
         int touch0Y = touch0Pos.second;
 
         double spacingNow = Math.sqrt(Math.pow(eventX - touch0X, 2) + Math.pow(eventY - touch0Y, 2));
-        if (Math.abs(spacingNow - doubleFingerInitialSpacingGetter.get()) > 92.0d) {
+        double doubleFingerInitialSpacing = doubleFingerInitialSpacingGetter.get();
+        if (!Double.isNaN(doubleFingerInitialSpacing) && Math.abs(spacingNow - doubleFingerInitialSpacing) > 92.0d) {
             confirmedScaleTranslateSetter.accept(true);
             confirmedScroll = false;
             cancelScaleTranslateTimer();
@@ -755,15 +765,21 @@ public class RelativeTouchContext implements TouchContext {
 
                     int frameTranslateX = midpointX - doubleFingerInitialMidpointXGetter.get();
                     int frameTranslateY = midpointY - doubleFingerInitialMidpointYGetter.get();
-                    double zoomFactor = spacing / doubleFingerInitialSpacingGetter.get();
-                    if (!Double.isFinite(zoomFactor)) {
+                    double doubleFingerInitialSpacing = doubleFingerInitialSpacingGetter.get();
+                    double zoomFactor;
+                    if (Double.isNaN(doubleFingerInitialSpacing)) {
                         zoomFactor = 1.0d;
-                    }
-                    if (zoomFactor < 0.02d) {
-                        zoomFactor = 0.02d;
-                    }
-                    if (zoomFactor > 30.0d) {
-                        zoomFactor = 30.0d;
+                    } else {
+                        zoomFactor = spacing / doubleFingerInitialSpacing;
+                        if (!Double.isFinite(zoomFactor)) {
+                            zoomFactor = 1.0d;
+                        }
+                        if (zoomFactor < 0.02d) {
+                            zoomFactor = 0.02d;
+                        }
+                        if (zoomFactor > 30.0d) {
+                            zoomFactor = 30.0d;
+                        }
                     }
                     scaleTransformCallback.report(frameTranslateX, frameTranslateY, zoomFactor, false);
                 }
@@ -804,6 +820,10 @@ public class RelativeTouchContext implements TouchContext {
                 conn.sendMouseButtonUp(mi);
             }
         }
+
+//        confirmedScaleTranslateSetter.accept(false);
+        doubleFingerInitialSpacingSetter.accept(Double.NaN);
+        scaleTransformCallback.report(-1, -1, Double.NaN, true);
     }
 
     @Override

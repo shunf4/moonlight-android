@@ -7,10 +7,12 @@ import com.limelight.binding.input.ControllerHandler;
 import com.limelight.binding.input.KeyboardTranslator;
 import com.limelight.binding.input.capture.InputCaptureManager;
 import com.limelight.binding.input.capture.InputCaptureProvider;
+import com.limelight.binding.input.capture.NullCaptureProvider;
 import com.limelight.binding.input.touch.AbsoluteTouchContext;
 import com.limelight.binding.input.touch.RelativeTouchContext;
 import com.limelight.binding.input.driver.UsbDriverService;
 import com.limelight.binding.input.evdev.EvdevListener;
+import com.limelight.binding.input.touch.ScaleTranslateOnlyTouchContext;
 import com.limelight.binding.input.touch.TouchContext;
 import com.limelight.binding.input.virtual_controller.VirtualController;
 import com.limelight.binding.video.CrashListener;
@@ -20,6 +22,8 @@ import com.limelight.binding.video.PerfOverlayListener;
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.NvConnectionListener;
 import com.limelight.nvstream.StreamConfiguration;
+import com.limelight.nvstream.av.audio.AudioRenderer;
+import com.limelight.nvstream.av.video.VideoDecoderRenderer;
 import com.limelight.nvstream.http.ComputerDetails;
 import com.limelight.nvstream.http.NvApp;
 import com.limelight.nvstream.http.NvHTTP;
@@ -101,8 +105,13 @@ import java.lang.reflect.Method;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 
@@ -184,6 +193,10 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private float savedTranslateX = 0.0f;
     private float savedTranslateY = 0.0f;
     private float savedScale = 1.0f;
+
+    private float pendingTranslateX = Float.NaN;
+    private float pendingTranslateY = Float.NaN;
+    private float pendingScale = Float.NaN;
 
     private boolean confirmedScaleTranslate;
     private double doubleFingerInitialSpacing;
@@ -379,7 +392,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
         performanceOverlayView = findViewById(R.id.performanceOverlay);
 
-        inputCaptureProvider = InputCaptureManager.getInputCaptureProvider(this, this);
+        if (prefConfig.shouldDisableControl) {
+            inputCaptureProvider = new NullCaptureProvider();
+        } else {
+            inputCaptureProvider = InputCaptureManager.getInputCaptureProvider(this, this);
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             streamView.setOnCapturedPointerListener(new View.OnCapturedPointerListener() {
@@ -569,7 +586,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             }
         }
 
-        StreamConfiguration config = new StreamConfiguration.Builder()
+        StreamConfiguration.Builder configBuild = new StreamConfiguration.Builder()
                 .setResolution(prefConfig.width, prefConfig.height)
                 .setLaunchRefreshRate(prefConfig.fps)
                 .setRefreshRate(chosenFrameRate)
@@ -586,7 +603,16 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 .setColorSpace(decoderRenderer.getPreferredColorSpace())
                 .setColorRange(decoderRenderer.getPreferredColorRange())
                 .setPersistGamepadsAfterDisconnect(!prefConfig.multiController)
-                .build();
+                ;
+
+        if (prefConfig.shouldDisableVideo && prefConfig.shouldLowerProfileWhenDisableVideo) {
+            configBuild = configBuild.setResolution(50, 50);
+//            configBuild = configBuild.setLaunchRefreshRate(2);
+//            configBuild = configBuild.setRefreshRate(2);
+            configBuild = configBuild.setBitrate(100);
+        }
+
+        StreamConfiguration config = configBuild.build();
 
         // Initialize the connection
         conn = new NvConnection(getApplicationContext(),
@@ -873,9 +899,13 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         // Initialize touch contexts
 
         TouchContext.ScaleTransformCallback scaleTransformCallback = (tx, ty, s, c) -> {
-            float currScale = (float)(savedScale * s);
-            float currTranslateX = (float)(s * savedTranslateX + tx);
-            float currTranslateY = (float)(s * savedTranslateY + ty);
+            float currScale = Double.isNaN(s) ? pendingScale : (float)(savedScale * s);
+            float currTranslateX = tx == -1 ? pendingTranslateX : (float)(s * savedTranslateX + tx);
+            float currTranslateY = ty == -1 ? pendingTranslateY : (float)(s * savedTranslateY + ty);
+
+            if (Float.isNaN(currScale) || Float.isNaN(currTranslateX) || Float.isNaN(currTranslateY)) {
+                return;
+            }
 
             if (c) {
                 savedScale = currScale;
@@ -889,6 +919,14 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 currScale = savedScale;
                 currTranslateX = savedTranslateX;
                 currTranslateY = savedTranslateY;
+
+                pendingScale = Float.NaN;
+                pendingTranslateX = Float.NaN;
+                pendingTranslateY = Float.NaN;
+            } else {
+                pendingScale = currScale;
+                pendingTranslateX = currTranslateX;
+                pendingTranslateY = currTranslateY;
             }
 
             streamView.setTranslationX(currTranslateX);
@@ -909,7 +947,30 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         }
 
         for (int i = 0; i < touchContextMap.length; i++) {
-            if (!prefConfig.touchscreenTrackpad) {
+            if (prefConfig.shouldDisableControl) {
+                touchContextMap[i] = new ScaleTranslateOnlyTouchContext(conn, i, streamView,
+                        backgroundTouchView.getWidth(),
+                        backgroundTouchView.getHeight(),
+                        prefConfig.modeLongPressNeededToDrag,
+                        prefConfig.edgeSingleFingerScrollWidth,
+                        prefConfig.shouldDoubleClickDragTranslate,
+                        prefConfig.absoluteTouchTapOnlyPlacesMouse,
+                        vibrator,
+                        (otherTouchIndex) -> {
+                            TouchContext otherTouchContext = touchContextMap[otherTouchIndex];
+                            return Pair.create(otherTouchContext.getLastTouchX(), otherTouchContext.getLastTouchY());
+                        },
+                        scaleTransformCallback,
+                        () -> confirmedScaleTranslate,
+                        (x) -> { confirmedScaleTranslate = x; },
+                        () -> doubleFingerInitialSpacing,
+                        (x) -> { doubleFingerInitialSpacing = x; },
+                        () -> doubleFingerInitialMidpointX,
+                        (x) -> { doubleFingerInitialMidpointX = x; },
+                        () -> doubleFingerInitialMidpointY,
+                        (y) -> { doubleFingerInitialMidpointY = y; }
+                );
+            } else if (!prefConfig.touchscreenTrackpad) {
                 touchContextMap[i] = new AbsoluteTouchContext(conn, i, streamView,
                         backgroundTouchView.getWidth(),
                         backgroundTouchView.getHeight(),
@@ -1172,14 +1233,16 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             streamView.setDesiredAspectRatio((double)prefConfig.width / (double)prefConfig.height);
             ViewGroup.LayoutParams lp = streamView.getLayoutParams();
             if ((
-                prefConfig.shouldUseShader1 ||
+                    prefConfig.shouldUseShader0 ||
+                            prefConfig.shouldUseShader1 ||
                 prefConfig.shouldUseShader2 ||
                 prefConfig.shouldUseShader3 ||
                 prefConfig.shouldUseShader4 ||
                 prefConfig.shouldUseShader5 ||
                 prefConfig.shouldUseShader6 ||
-                prefConfig.shouldUseShader7 ||
-                prefConfig.shouldUseShader8
+                        prefConfig.shouldUseShader7 ||
+                        prefConfig.shouldUseShader8 ||
+                prefConfig.shouldUseShader9
             )) {
                 lp.width = prefConfig.width;
                 lp.height = prefConfig.height;
@@ -1592,6 +1655,12 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         // the right mouse button is held down, so we ignore those.
         int eventSource = event.getSource();
         if ((eventSource == InputDevice.SOURCE_MOUSE ||
+                eventSource == InputDevice.SOURCE_MOUSE_RELATIVE)) {
+            if (prefConfig.shouldDisableControl) {
+                return false;
+            }
+        }
+        if ((eventSource == InputDevice.SOURCE_MOUSE ||
                 eventSource == InputDevice.SOURCE_MOUSE_RELATIVE) &&
                 event.getKeyCode() == KeyEvent.KEYCODE_BACK) {
 
@@ -1662,11 +1731,74 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         return handleKeyUp(event) || super.onKeyUp(keyCode, event);
     }
 
+    public List<Function<Boolean, Boolean>> prefShaderConfigFunctions = Arrays.<Function<Boolean, Boolean>>asList(
+            (newValue) -> { Boolean oldValue = prefConfig.shouldUseShader0; prefConfig.shouldUseShader0 = newValue != null ? newValue : oldValue; return oldValue; },
+            (newValue) -> { Boolean oldValue = prefConfig.shouldUseShader1; prefConfig.shouldUseShader1 = newValue != null ? newValue : oldValue; return oldValue; },
+            (newValue) -> { Boolean oldValue = prefConfig.shouldUseShader2; prefConfig.shouldUseShader2 = newValue != null ? newValue : oldValue; return oldValue; },
+            (newValue) -> { Boolean oldValue = prefConfig.shouldUseShader3; prefConfig.shouldUseShader3 = newValue != null ? newValue : oldValue; return oldValue; },
+            (newValue) -> { Boolean oldValue = prefConfig.shouldUseShader4; prefConfig.shouldUseShader4 = newValue != null ? newValue : oldValue; return oldValue; },
+            (newValue) -> { Boolean oldValue = prefConfig.shouldUseShader5; prefConfig.shouldUseShader5 = newValue != null ? newValue : oldValue; return oldValue; },
+            (newValue) -> { Boolean oldValue = prefConfig.shouldUseShader6; prefConfig.shouldUseShader6 = newValue != null ? newValue : oldValue; return oldValue; },
+            (newValue) -> { Boolean oldValue = prefConfig.shouldUseShader7; prefConfig.shouldUseShader7 = newValue != null ? newValue : oldValue; return oldValue; },
+            (newValue) -> { Boolean oldValue = prefConfig.shouldUseShader8; prefConfig.shouldUseShader8 = newValue != null ? newValue : oldValue; return oldValue; },
+            (newValue) -> { Boolean oldValue = prefConfig.shouldUseShader9; prefConfig.shouldUseShader9 = newValue != null ? newValue : oldValue; return oldValue; }
+    );
+
+    public static Map<Integer, String> shaderDescMap = new HashMap<>();
+    static {
+        shaderDescMap.put(0, "Unchanged");
+        shaderDescMap.put(1, "Grayscale");
+        shaderDescMap.put(2, "8-Level Gray");
+        shaderDescMap.put(3, "8-Level BW Dotted");
+        shaderDescMap.put(4, "White++++");
+        shaderDescMap.put(5, "White+++");
+        shaderDescMap.put(6, "White+");
+        shaderDescMap.put(7, "Medium");
+        shaderDescMap.put(8, "Black+");
+        shaderDescMap.put(9, "Black++++");
+    }
+
     @Override
     public boolean handleKeyUp(KeyEvent event) {
         // Pass-through virtual navigation keys
         if ((event.getFlags() & KeyEvent.FLAG_VIRTUAL_HARD_KEY) != 0) {
             return false;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            if (prefConfig.isCurrDeviceLikeOnyx && event.getUnicodeChar() == '{') {
+                int currentSelected = -1;
+                for (int i = prefShaderConfigFunctions.size() - 1; i >= 0; i--) {
+                    if (Boolean.TRUE.equals(prefShaderConfigFunctions.get(i).apply(null))) {
+                        currentSelected = i;
+                        break;
+                    }
+                }
+                if (currentSelected != -1) {
+                    prefShaderConfigFunctions.get(currentSelected).apply(false);
+                }
+                int targetShader = currentSelected <= 0 ? (prefShaderConfigFunctions.size() - 1) : (currentSelected - 1);
+                prefShaderConfigFunctions.get(targetShader).apply(true);
+                decoderRenderer.shunf4ModReload();
+                Toast.makeText(this, "Shader " + targetShader + (shaderDescMap.get(targetShader) != null ? (" (" + shaderDescMap.get(targetShader) + ")") : ""), Toast.LENGTH_SHORT).show();
+            }
+
+            if (prefConfig.isCurrDeviceLikeOnyx && event.getUnicodeChar() == '}') {
+                int currentSelected = -1;
+                for (int i = prefShaderConfigFunctions.size() - 1; i >= 0; i--) {
+                    if (Boolean.TRUE.equals(prefShaderConfigFunctions.get(i).apply(null))) {
+                        currentSelected = i;
+                        break;
+                    }
+                }
+                if (currentSelected != -1) {
+                    prefShaderConfigFunctions.get(currentSelected).apply(false);
+                }
+                int targetShader = currentSelected >= (prefShaderConfigFunctions.size() - 1) ? (0) : (currentSelected + 1);
+                prefShaderConfigFunctions.get(targetShader).apply(true);
+                decoderRenderer.shunf4ModReload();
+                Toast.makeText(this, "Shader " + targetShader + (shaderDescMap.get(targetShader) != null ? (" (" + shaderDescMap.get(targetShader) + ")") : ""), Toast.LENGTH_SHORT).show();
+            }
         }
 
         // Onyx BOOX sends nav bar back button with NO FLAG_VIRTUAL_HARD_KEY flag, with non-standard event source 0x12345678
@@ -1677,6 +1809,12 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         // Handle a synthetic back button event that some Android OS versions
         // create as a result of a right-click.
         int eventSource = event.getSource();
+        if ((eventSource == InputDevice.SOURCE_MOUSE ||
+                eventSource == InputDevice.SOURCE_MOUSE_RELATIVE)) {
+            if (prefConfig.shouldDisableControl) {
+                return false;
+            }
+        }
         if ((eventSource == InputDevice.SOURCE_MOUSE ||
                 eventSource == InputDevice.SOURCE_MOUSE_RELATIVE) &&
                 event.getKeyCode() == KeyEvent.KEYCODE_BACK) {
@@ -2073,6 +2211,9 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                                     event.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER)) ||
                     eventSource == 12290) // 12290 = Samsung DeX mode desktop mouse
             {
+                if (prefConfig.shouldDisableControl) {
+                    return false;
+                }
                 int buttonState = event.getButtonState();
                 int changedButtons = buttonState ^ lastButtonState;
 
@@ -2989,10 +3130,88 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             // Update GameManager state to indicate we're "loading" while connecting
             UiHelper.notifyStreamConnecting(Game.this);
 
-            decoderRenderer.setRenderTarget(holder);
-            decoderRenderer.onSurfaceSizeChanged(width, height);
-            conn.start(new AndroidAudioRenderer(Game.this, prefConfig.enableAudioFx),
-                    decoderRenderer, Game.this);
+            AudioRenderer audioRenderer;
+
+            if (prefConfig.shouldDisableAudio) {
+                audioRenderer = new AudioRenderer() {
+                    @Override
+                    public int setup(MoonBridge.AudioConfiguration audioConfiguration, int sampleRate, int samplesPerFrame) {
+                        return 0;
+                    }
+
+                    @Override
+                    public void start() {
+
+                    }
+
+                    @Override
+                    public void stop() {
+
+                    }
+
+                    @Override
+                    public void playDecodedAudio(short[] audioData) {
+
+                    }
+
+                    @Override
+                    public void cleanup() {
+
+                    }
+                };
+            } else {
+                audioRenderer = new AndroidAudioRenderer(Game.this, prefConfig.enableAudioFx);
+            }
+
+            if (prefConfig.shouldDisableVideo) {
+                conn.start(audioRenderer,
+                        new VideoDecoderRenderer() {
+                            @Override
+                            public int setup(int format, int width, int height, int redrawRate) {
+                                 return 0;
+                            }
+
+                            @Override
+                            public void start() {
+
+                            }
+
+                            @Override
+                            public void stop() {
+
+                            }
+
+                            @Override
+                            public int submitDecodeUnit(byte[] decodeUnitData, int decodeUnitLength, int decodeUnitType, int frameNumber, int frameType, char frameHostProcessingLatency, long receiveTimeMs, long enqueueTimeMs) {
+                                return 0;
+                            }
+
+                            @Override
+                            public void cleanup() {
+
+                            }
+
+                            @Override
+                            public int getCapabilities() {
+                                return decoderRenderer.getCapabilities();
+                            }
+
+                            @Override
+                            public void setHdrMode(boolean enabled, byte[] hdrMetadata) {
+
+                            }
+
+                            @Override
+                            public void shunf4ModReload() {
+
+                            }
+                        }, Game.this);
+            } else {
+                decoderRenderer.setRenderTarget(holder);
+                decoderRenderer.onSurfaceSizeChanged(width, height);
+                conn.start(audioRenderer,
+                        decoderRenderer, Game.this);
+            }
         }
     }
 

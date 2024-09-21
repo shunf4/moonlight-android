@@ -155,9 +155,33 @@
             android:summary="should_user_rotate_landscape_at_start"
             android:defaultValue="false" />
         <CheckBoxPreference
+            android:key="should_disable_video"
+            android:title="should_disable_video"
+            android:summary="should_disable_video"
+            android:defaultValue="false" />
+        <CheckBoxPreference
+            android:key="should_lower_profile_when_disable_video"
+            android:title="should_lower_profile_when_disable_video"
+            android:summary="should_lower_profile_when_disable_video"
+            android:defaultValue="true" />
+        <CheckBoxPreference
+            android:key="should_disable_audio"
+            android:title="should_disable_audio"
+            android:summary="should_disable_audio"
+            android:defaultValue="false" />
+        <CheckBoxPreference
+            android:key="should_disable_control"
+            android:title="should_disable_control"
+            android:summary="should_disable_control"
+            android:defaultValue="false" />
+        <CheckBoxPreference
             android:key="is_curr_device_like_onyx"
             android:title="is_curr_device_like_onyx"
             android:summary="is_curr_device_like_onyx"/>
+        <CheckBoxPreference
+            android:key="should_use_shader_0"
+            android:title="should_use_shader_0"
+            android:summary="should_use_shader_0"/>
         <CheckBoxPreference
             android:key="should_use_shader_1"
             android:title="should_use_shader_1"
@@ -190,6 +214,10 @@
             android:key="should_use_shader_8"
             android:title="should_use_shader_8"
             android:summary="should_use_shader_8"/>
+        <CheckBoxPreference
+            android:key="should_use_shader_9"
+            android:title="should_use_shader_9"
+            android:summary="should_use_shader_9"/>
         <CheckBoxPreference
             android:key="absolute_touch_tap_only_places_mouse"
             android:title="absolute_touch_tap_only_places_mouse"

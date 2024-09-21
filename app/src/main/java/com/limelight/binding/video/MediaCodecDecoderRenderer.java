@@ -580,21 +580,30 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         LimeLog.info("Configuring with format: "+format);
 
         if ((
-                prefs.shouldUseShader1 ||
+                prefs.shouldUseShader0 ||
+                        prefs.shouldUseShader1 ||
                         prefs.shouldUseShader2 ||
                         prefs.shouldUseShader3 ||
                         prefs.shouldUseShader4 ||
                         prefs.shouldUseShader5 ||
                         prefs.shouldUseShader6 ||
                         prefs.shouldUseShader7 ||
-                        prefs.shouldUseShader8
+                        prefs.shouldUseShader8 ||
+                        prefs.shouldUseShader9
         )) {
-            openEglThread = new HandlerThread("OpenEglThread");
-            openEglThread.start();
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+            if (openEglThread == null) {
+                openEglThread = new HandlerThread("OpenEglThread");
+                openEglThread.start();
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            } else {
+                synchronized(openEglFrameLock) {
+                    openEglFrameStopped = true;
+                    openEglFrameLock.notifyAll();
+                }
             }
 
             EGLContext[] eglContext = new EGLContext[1];
@@ -683,8 +692,39 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
                 int fragmentShader = GLES20.glCreateShader(GLES20.GL_FRAGMENT_SHADER);
                 String fragmentShaderSource = null;
-                
+
+                if (prefs.shouldUseShader0) {
+                    fragmentShaderSource = "#extension GL_OES_EGL_image_external : require\n" +
+                            "        precision mediump float;\n" +
+                            "        \n" +
+                            "        varying vec2 varUvs;\n" +
+                            "        uniform samplerExternalOES texSampler;\n" +
+                            "        \n" +
+                            "        void main()\n" +
+                            "        {\n" +
+                            "            // Convert to greyscale here\n" +
+                            "            vec4 c = texture2D(texSampler, varUvs);\n" +
+                            "            gl_FragColor = vec4(c.r, c.g, c.b, c.a);\n" +
+                            "        }";
+                }
+
                 if (prefs.shouldUseShader1) {
+                    fragmentShaderSource = "#extension GL_OES_EGL_image_external : require\n" +
+                            "        precision mediump float;\n" +
+                            "        \n" +
+                            "        varying vec2 varUvs;\n" +
+                            "        uniform samplerExternalOES texSampler;\n" +
+                            "        \n" +
+                            "        void main()\n" +
+                            "        {\n" +
+                            "            // Convert to greyscale here\n" +
+                            "            vec4 c = texture2D(texSampler, varUvs);\n" +
+                            "            float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
+                            "            gl_FragColor = vec4(gs, gs, gs, c.a);\n" +
+                            "        }";
+                }
+
+                if (prefs.shouldUseShader2) {
                     fragmentShaderSource = "#extension GL_OES_EGL_image_external : require\n" +
                         "        precision mediump float;\n" +
                         "        \n" +
@@ -701,7 +741,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                         "        }";
                 }
 
-                if (prefs.shouldUseShader2) {
+                if (prefs.shouldUseShader3) {
                     fragmentShaderSource = "#extension GL_OES_EGL_image_external : require\n" +
                             "precision mediump float;\n" +
                             "\n" +
@@ -713,10 +753,10 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                             "        // Convert to greyscale here\n" +
                             "        vec4 c = texture2D(texSampler, varUvs);\n" +
                             "        float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
-                            "        float i1 = floor(varUvs.x * 1984.0);\n" +
+                            "        float i1 = floor(varUvs.x * ___PIXEL_WIDTH___.0);\n" +
                             "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
                             "        int umod6 = int(i1);\n" +
-                            "        i1 = floor(varUvs.y * 1120.0);\n" +
+                            "        i1 = floor(varUvs.y * ___PIXEL_HEIGHT___.0);\n" +
                             "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
                             "        int vmod6 = int(i1);\n" +
                             // "        gs = atan(24.0 * (gs - 0.46)) / 3.14159 * 1.07 + 0.5;\n" +
@@ -752,59 +792,8 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
                 }
 
-                if (prefs.shouldUseShader3) {
-
-                    fragmentShaderSource = "#extension GL_OES_EGL_image_external : require\n" +
-                            "precision mediump float;\n" +
-                            "\n" +
-                            "varying vec2 varUvs;\n" +
-                            "uniform samplerExternalOES texSampler;\n" +
-                            "\n" +
-                            "void main()\n" +
-                            "{\n" +
-                            "        // Convert to greyscale here\n" +
-                            "        vec4 c = texture2D(texSampler, varUvs);\n" +
-                            "        float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
-                            "        float i1 = floor(varUvs.x * 1984.0);\n" +
-                            "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
-                            "        int umod6 = int(i1);\n" +
-                            "        i1 = floor(varUvs.y * 1120.0);\n" +
-                            "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
-                            "        int vmod6 = int(i1);\n" +
-                             "        gs = atan(25.0 * (gs - 0.46)) / 3.14159 * 1.07 + 0.5;\n" +
-                            "        gs = floor(gs * 8.0 + 0.5);\n" +
-                            "        float gs2 = gs;\n" +
-                            "\n" +
-                            "        gs2 = (gs < 4.0) ? (\n" +
-                            "                (gs < 2.0) ? (\n" +
-                            "                        (gs < 1.0) ?\n" +
-                            "                                (0.0) :\n" +
-                            "                                (((umod6 == 3) && (vmod6 == 3)) ? 1.0 : 0.0)\n" +
-                            "                ) : (\n" +
-                            "                        (gs < 3.0) ?\n" +
-                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
-                            "                                (((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
-                            "                )\n" +
-                            "        ) : (\n" +
-                            "                (gs < 6.0) ? (\n" +
-                            "                        (gs < 5.0) ?\n" +
-                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 0 || vmod6 == 3) || (umod6 == 0 || umod6 == 3) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5) || (umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
-                            // "                                (!(((umod6 == 1 || umod6 == 4) && (vmod6 == 0 || vmod6 == 3) || (umod6 == 0 || umod6 == 3) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5) || (umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4))) ? 1.0 : 0.0)\n" +
-                            "                                (!((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
-                            "                ) : (\n" +
-                            "                        (gs < 7.0) ?\n" +
-                            "                                (!(((umod6 == 1) && (vmod6 == 5))) ? 1.0 : 0.0) :\n" +
-                            "                                1.0\n" +
-                            "                )\n" +
-                            "        );\n" +
-                            "\n" +
-                            "        gl_FragColor = vec4(gs2, gs2, gs2, c.a);\n" +
-                            "}\n" +
-                            "\n";
-
-                }
-
                 if (prefs.shouldUseShader4) {
+
                     fragmentShaderSource = "#extension GL_OES_EGL_image_external : require\n" +
                             "precision mediump float;\n" +
                             "\n" +
@@ -816,13 +805,13 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                             "        // Convert to greyscale here\n" +
                             "        vec4 c = texture2D(texSampler, varUvs);\n" +
                             "        float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
-                            "        float i1 = floor(varUvs.x * 1984.0);\n" +
+                            "        float i1 = floor(varUvs.x * ___PIXEL_WIDTH___.0);\n" +
                             "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
                             "        int umod6 = int(i1);\n" +
-                            "        i1 = floor(varUvs.y * 1120.0);\n" +
+                            "        i1 = floor(varUvs.y * ___PIXEL_HEIGHT___.0);\n" +
                             "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
                             "        int vmod6 = int(i1);\n" +
-                            "        gs = atan(21.0 * (gs - 0.48)) / 3.14159 * 1.07 + 0.5;\n" +
+                             "        gs = atan(15.0 * (gs - 0.38)) / 3.14159 * 1.14 + 0.50;\n" +
                             "        gs = floor(gs * 8.0 + 0.5);\n" +
                             "        float gs2 = gs;\n" +
                             "\n" +
@@ -867,13 +856,13 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                             "        // Convert to greyscale here\n" +
                             "        vec4 c = texture2D(texSampler, varUvs);\n" +
                             "        float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
-                            "        float i1 = floor(varUvs.x * 1984.0);\n" +
+                            "        float i1 = floor(varUvs.x * ___PIXEL_WIDTH___.0);\n" +
                             "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
                             "        int umod6 = int(i1);\n" +
-                            "        i1 = floor(varUvs.y * 1120.0);\n" +
+                            "        i1 = floor(varUvs.y * ___PIXEL_HEIGHT___.0);\n" +
                             "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
                             "        int vmod6 = int(i1);\n" +
-                            "        gs = atan(19.0 * (gs - 0.49)) / 3.14159 * 1.07 + 0.5;\n" +
+                            "        gs = atan(17.0 * (gs - 0.42)) / 3.14159 * 1.08 + 0.51;\n" +
                             "        gs = floor(gs * 8.0 + 0.5);\n" +
                             "        float gs2 = gs;\n" +
                             "\n" +
@@ -895,7 +884,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                             "                                (!((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
                             "                ) : (\n" +
                             "                        (gs < 7.0) ?\n" +
-                            "                                (!(((umod6 == 1 || umod6 == 4) && (vmod6 == 1 || vmod6 == 4))) ? 1.0 : 0.0) :\n" +
+                            "                                (!(((umod6 == 1) && (vmod6 == 5))) ? 1.0 : 0.0) :\n" +
                             "                                1.0\n" +
                             "                )\n" +
                             "        );\n" +
@@ -903,10 +892,10 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                             "        gl_FragColor = vec4(gs2, gs2, gs2, c.a);\n" +
                             "}\n" +
                             "\n";
+
                 }
 
                 if (prefs.shouldUseShader6) {
-
                     fragmentShaderSource = "#extension GL_OES_EGL_image_external : require\n" +
                             "precision mediump float;\n" +
                             "\n" +
@@ -918,13 +907,13 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                             "        // Convert to greyscale here\n" +
                             "        vec4 c = texture2D(texSampler, varUvs);\n" +
                             "        float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
-                            "        float i1 = floor(varUvs.x * 1984.0);\n" +
+                            "        float i1 = floor(varUvs.x * ___PIXEL_WIDTH___.0);\n" +
                             "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
                             "        int umod6 = int(i1);\n" +
-                            "        i1 = floor(varUvs.y * 1120.0);\n" +
+                            "        i1 = floor(varUvs.y * ___PIXEL_HEIGHT___.0);\n" +
                             "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
                             "        int vmod6 = int(i1);\n" +
-                            "        gs = atan(6.8 * (gs - 0.5)) / 3.14159 * 1.04 + 0.5;\n" +
+                            "        gs = atan(16.0 * (gs - 0.44)) / 3.14159 * 1.07 + 0.5;\n" +
                             "        gs = floor(gs * 8.0 + 0.5);\n" +
                             "        float gs2 = gs;\n" +
                             "\n" +
@@ -957,6 +946,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                 }
 
                 if (prefs.shouldUseShader7) {
+
                     fragmentShaderSource = "#extension GL_OES_EGL_image_external : require\n" +
                             "precision mediump float;\n" +
                             "\n" +
@@ -968,13 +958,63 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                             "        // Convert to greyscale here\n" +
                             "        vec4 c = texture2D(texSampler, varUvs);\n" +
                             "        float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
-                            "        float i1 = floor(varUvs.x * 1984.0);\n" +
+                            "        float i1 = floor(varUvs.x * ___PIXEL_WIDTH___.0);\n" +
                             "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
                             "        int umod6 = int(i1);\n" +
-                            "        i1 = floor(varUvs.y * 1120.0);\n" +
+                            "        i1 = floor(varUvs.y * ___PIXEL_HEIGHT___.0);\n" +
                             "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
                             "        int vmod6 = int(i1);\n" +
-                            "        gs = atan(18.0 * (gs - 0.54)) / 3.14159 * 1.07 + 0.5;\n" +
+                            "        gs = atan(12.0 * (gs - 0.5)) / 3.14159 * 1.09 + 0.5;\n" +
+                            "        gs = floor(gs * 8.0 + 0.5);\n" +
+                            "        float gs2 = gs;\n" +
+                            "\n" +
+                            "        gs2 = (gs < 4.0) ? (\n" +
+                            "                (gs < 2.0) ? (\n" +
+                            "                        (gs < 1.0) ?\n" +
+                            "                                (0.0) :\n" +
+                            "                                (((umod6 == 3) && (vmod6 == 3)) ? 1.0 : 0.0)\n" +
+                            "                ) : (\n" +
+                            "                        (gs < 3.0) ?\n" +
+                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
+                            "                                (((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
+                            "                )\n" +
+                            "        ) : (\n" +
+                            "                (gs < 6.0) ? (\n" +
+                            "                        (gs < 5.0) ?\n" +
+                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 0 || vmod6 == 3) || (umod6 == 0 || umod6 == 3) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5) || (umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
+                            // "                                (!(((umod6 == 1 || umod6 == 4) && (vmod6 == 0 || vmod6 == 3) || (umod6 == 0 || umod6 == 3) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5) || (umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4))) ? 1.0 : 0.0)\n" +
+                            "                                (!((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
+                            "                ) : (\n" +
+                            "                        (gs < 7.0) ?\n" +
+                            "                                (!(((umod6 == 1 || umod6 == 4) && (vmod6 == 1 || vmod6 == 4))) ? 1.0 : 0.0) :\n" +
+                            "                                ((gs < 7.05) ? ((!((umod6 == 4) && (vmod6 == 4))) ? 1.0 : 0.0) : 1.0)\n" +
+                            "                )\n" +
+                            "        );\n" +
+                            "\n" +
+                            "        gl_FragColor = vec4(gs2, gs2, gs2, c.a);\n" +
+                            "}\n" +
+                            "\n";
+                }
+
+                if (prefs.shouldUseShader8) {
+                    fragmentShaderSource = "#extension GL_OES_EGL_image_external : require\n" +
+                            "precision mediump float;\n" +
+                            "\n" +
+                            "varying vec2 varUvs;\n" +
+                            "uniform samplerExternalOES texSampler;\n" +
+                            "\n" +
+                            "void main()\n" +
+                            "{\n" +
+                            "        // Convert to greyscale here\n" +
+                            "        vec4 c = texture2D(texSampler, varUvs);\n" +
+                            "        float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
+                            "        float i1 = floor(varUvs.x * ___PIXEL_WIDTH___.0);\n" +
+                            "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
+                            "        int umod6 = int(i1);\n" +
+                            "        i1 = floor(varUvs.y * ___PIXEL_HEIGHT___.0);\n" +
+                            "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
+                            "        int vmod6 = int(i1);\n" +
+                            "        gs = atan(18.0 * (gs - 0.57)) / 3.14159 * 1.08 + 0.5;\n" +
                             "        gs = floor(gs * 8.0 + 0.5);\n" +
                             "        float gs2 = gs;\n" +
                             "\n" +
@@ -1006,7 +1046,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                             "\n";
                 }
 
-                if (prefs.shouldUseShader8) {
+                if (prefs.shouldUseShader9) {
                     fragmentShaderSource = "#extension GL_OES_EGL_image_external : require\n" +
                             "precision mediump float;\n" +
                             "\n" +
@@ -1018,13 +1058,13 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                             "        // Convert to greyscale here\n" +
                             "        vec4 c = texture2D(texSampler, varUvs);\n" +
                             "        float gs = 0.299*c.r + 0.587*c.g + 0.114*c.b;\n" +
-                            "        float i1 = floor(varUvs.x * 1984.0);\n" +
+                            "        float i1 = floor(varUvs.x * ___PIXEL_WIDTH___.0);\n" +
                             "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
                             "        int umod6 = int(i1);\n" +
-                            "        i1 = floor(varUvs.y * 1120.0);\n" +
+                            "        i1 = floor(varUvs.y * ___PIXEL_HEIGHT___.0);\n" +
                             "        i1 = i1 - (6.0 * floor(i1 / 6.0));\n" +
                             "        int vmod6 = int(i1);\n" +
-                            "        gs = atan(24.0 * (gs - 0.56)) / 3.14159 * 1.07 + 0.5;\n" +
+                            "        gs = atan(12.0 * (gs - 0.66)) / 3.14159 * 1.05 + 0.48;\n" +
                             "        gs = floor(gs * 8.0 + 0.5);\n" +
                             "        float gs2 = gs;\n" +
                             "\n" +
@@ -1035,7 +1075,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                             "                                (((umod6 == 3) && (vmod6 == 3)) ? 1.0 : 0.0)\n" +
                             "                ) : (\n" +
                             "                        (gs < 3.0) ?\n" +
-                            "                                (((umod6 == 1 || umod6 == 4) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
+                            "                                (((umod6 == 1) && (vmod6 == 1 || vmod6 == 4)) ? 1.0 : 0.0) :\n" +
                             "                                (((umod6 == 2 || umod6 == 5) && (vmod6 == 1 || vmod6 == 4) || (umod6 == 1 || umod6 == 4) && (vmod6 == 2 || vmod6 == 5)) ? 1.0 : 0.0)\n" +
                             "                )\n" +
                             "        ) : (\n" +
@@ -1055,6 +1095,9 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                             "}\n" +
                             "\n";
                 }
+
+                fragmentShaderSource = fragmentShaderSource.replace("___PIXEL_WIDTH___", "" + format.getInteger(MediaFormat.KEY_WIDTH));
+                fragmentShaderSource = fragmentShaderSource.replace("___PIXEL_HEIGHT___", "" + format.getInteger(MediaFormat.KEY_HEIGHT));
 
                 GLES20.glShaderSource(fragmentShader, fragmentShaderSource);
                 GLES20.glCompileShader(fragmentShader);
@@ -2027,6 +2070,14 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
             if (!codecRecoveryType.compareAndSet(CR_RECOVERY_TYPE_NONE, CR_RECOVERY_TYPE_RESTART)) {
                 codecRecoveryType.compareAndSet(CR_RECOVERY_TYPE_FLUSH, CR_RECOVERY_TYPE_RESTART);
             }
+        }
+    }
+
+    @Override
+    public void shunf4ModReload() {
+        // Promote None/Flush to Restart and leave Reset alone
+        if (!codecRecoveryType.compareAndSet(CR_RECOVERY_TYPE_NONE, CR_RECOVERY_TYPE_RESTART)) {
+            codecRecoveryType.compareAndSet(CR_RECOVERY_TYPE_FLUSH, CR_RECOVERY_TYPE_RESTART);
         }
     }
 

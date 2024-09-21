@@ -64,7 +64,12 @@ public class PreferenceConfiguration {
     private static final String ABSOLUTE_TOUCH_TAP_ONLY_PLACES_MOUSE_PREF_STRING = "absolute_touch_tap_only_places_mouse";
     private static final String SHOULD_RELATIVE_LONG_PRESS_RIGHT_CLICK_PREF_STRING = "should_relative_long_press_right_click";
     private static final String SHOULD_USER_ROTATE_LANDSCAPE_AT_START_PREF_STRING = "should_user_rotate_landscape_at_start";
+    private static final String SHOULD_DISABLE_VIDEO_PREF_STRING = "should_disable_video";
+    private static final String SHOULD_LOWER_PROFILE_WHEN_DISABLE_VIDEO_PREF_STRING = "should_lower_profile_when_disable_video";
+    private static final String SHOULD_DISABLE_AUDIO_PREF_STRING = "should_disable_audio";
+    private static final String SHOULD_DISABLE_CONTROL_PREF_STRING = "should_disable_control";
     private static final String IS_CURR_DEVICE_LIKE_ONYX_PREF_STRING = "is_curr_device_like_onyx";
+    private static final String SHOULD_USE_SHADER_0_PREF_STRING = "should_use_shader_0";
     private static final String SHOULD_USE_SHADER_1_PREF_STRING = "should_use_shader_1";
     private static final String SHOULD_USE_SHADER_2_PREF_STRING = "should_use_shader_2";
     private static final String SHOULD_USE_SHADER_3_PREF_STRING = "should_use_shader_3";
@@ -73,6 +78,7 @@ public class PreferenceConfiguration {
     private static final String SHOULD_USE_SHADER_6_PREF_STRING = "should_use_shader_6";
     private static final String SHOULD_USE_SHADER_7_PREF_STRING = "should_use_shader_7";
     private static final String SHOULD_USE_SHADER_8_PREF_STRING = "should_use_shader_8";
+    private static final String SHOULD_USE_SHADER_9_PREF_STRING = "should_use_shader_9";
     private static final String EDGE_SINGLE_FINGER_SCROLL_WIDTH_PREF_STRING = "edge_single_finger_scroll_width";
     private static final String LATENCY_TOAST_PREF_STRING = "checkbox_enable_post_stream_toast";
     private static final String FRAME_PACING_PREF_STRING = "frame_pacing";
@@ -117,6 +123,10 @@ public class PreferenceConfiguration {
     private static final boolean DEFAULT_ABSOLUTE_TOUCH_TAP_ONLY_PLACES_MOUSE = false;
     private static final boolean DEFAULT_SHOULD_RELATIVE_LONG_PRESS_RIGHT_CLICK = true;
     private static final boolean DEFAULT_SHOULD_USER_ROTATE_LANDSCAPE_AT_START = false;
+    private static final boolean DEFAULT_SHOULD_DISABLE_VIDEO = false;
+    private static final boolean DEFAULT_SHOULD_LOWER_PROFILE_WHEN_DISABLE_VIDEO = true;
+    private static final boolean DEFAULT_SHOULD_DISABLE_AUDIO = false;
+    private static final boolean DEFAULT_SHOULD_DISABLE_CONTROL = false;
     private static final boolean DEFAULT_IS_CURR_DEVICE_LIKE_ONYX = Game.IS_ONYX_BOOX_DEVICE;
     private static final String DEFAULT_EDGE_SINGLE_FINGER_SCROLL_WIDTH = "150";
     private static final String DEFAULT_AUDIO_CONFIG = "2"; // Stereo
@@ -171,7 +181,12 @@ public class PreferenceConfiguration {
     public boolean absoluteTouchTapOnlyPlacesMouse;
     public boolean shouldRelativeLongPressRightClick;
     public boolean shouldUserRotateLandscapeAtStart;
+    public boolean shouldDisableVideo;
+    public boolean shouldLowerProfileWhenDisableVideo;
+    public boolean shouldDisableAudio;
+    public boolean shouldDisableControl;
     public boolean isCurrDeviceLikeOnyx;
+    public boolean shouldUseShader0;
     public boolean shouldUseShader1;
     public boolean shouldUseShader2;
     public boolean shouldUseShader3;
@@ -180,6 +195,7 @@ public class PreferenceConfiguration {
     public boolean shouldUseShader6;
     public boolean shouldUseShader7;
     public boolean shouldUseShader8;
+    public boolean shouldUseShader9;
     public int edgeSingleFingerScrollWidth;
     public MoonBridge.AudioConfiguration audioConfiguration;
     public int framePacing;
@@ -637,7 +653,12 @@ public class PreferenceConfiguration {
         config.absoluteTouchTapOnlyPlacesMouse = prefs.getBoolean(ABSOLUTE_TOUCH_TAP_ONLY_PLACES_MOUSE_PREF_STRING, DEFAULT_ABSOLUTE_TOUCH_TAP_ONLY_PLACES_MOUSE);
         config.shouldRelativeLongPressRightClick = prefs.getBoolean(SHOULD_RELATIVE_LONG_PRESS_RIGHT_CLICK_PREF_STRING, DEFAULT_SHOULD_RELATIVE_LONG_PRESS_RIGHT_CLICK);
         config.shouldUserRotateLandscapeAtStart = prefs.getBoolean(SHOULD_USER_ROTATE_LANDSCAPE_AT_START_PREF_STRING, DEFAULT_SHOULD_USER_ROTATE_LANDSCAPE_AT_START);
+        config.shouldDisableVideo = prefs.getBoolean(SHOULD_DISABLE_VIDEO_PREF_STRING, DEFAULT_SHOULD_DISABLE_VIDEO);
+        config.shouldLowerProfileWhenDisableVideo = prefs.getBoolean(SHOULD_LOWER_PROFILE_WHEN_DISABLE_VIDEO_PREF_STRING, DEFAULT_SHOULD_LOWER_PROFILE_WHEN_DISABLE_VIDEO);
+        config.shouldDisableAudio = prefs.getBoolean(SHOULD_DISABLE_AUDIO_PREF_STRING, DEFAULT_SHOULD_DISABLE_AUDIO);
+        config.shouldDisableControl = prefs.getBoolean(SHOULD_DISABLE_CONTROL_PREF_STRING, DEFAULT_SHOULD_DISABLE_CONTROL);
         config.isCurrDeviceLikeOnyx = prefs.getBoolean(IS_CURR_DEVICE_LIKE_ONYX_PREF_STRING, DEFAULT_IS_CURR_DEVICE_LIKE_ONYX);
+        config.shouldUseShader0 = prefs.getBoolean(SHOULD_USE_SHADER_0_PREF_STRING, false);
         config.shouldUseShader1 = prefs.getBoolean(SHOULD_USE_SHADER_1_PREF_STRING, false);
         config.shouldUseShader2 = prefs.getBoolean(SHOULD_USE_SHADER_2_PREF_STRING, false);
         config.shouldUseShader3 = prefs.getBoolean(SHOULD_USE_SHADER_3_PREF_STRING, false);
@@ -646,6 +667,7 @@ public class PreferenceConfiguration {
         config.shouldUseShader6 = prefs.getBoolean(SHOULD_USE_SHADER_6_PREF_STRING, false);
         config.shouldUseShader7 = prefs.getBoolean(SHOULD_USE_SHADER_7_PREF_STRING, false);
         config.shouldUseShader8 = prefs.getBoolean(SHOULD_USE_SHADER_8_PREF_STRING, false);
+        config.shouldUseShader9 = prefs.getBoolean(SHOULD_USE_SHADER_9_PREF_STRING, false);
         config.edgeSingleFingerScrollWidth = Integer.parseInt(prefs.getString(EDGE_SINGLE_FINGER_SCROLL_WIDTH_PREF_STRING, DEFAULT_EDGE_SINGLE_FINGER_SCROLL_WIDTH));
         config.enableLatencyToast = prefs.getBoolean(LATENCY_TOAST_PREF_STRING, DEFAULT_LATENCY_TOAST);
         config.absoluteMouseMode = prefs.getBoolean(ABSOLUTE_MOUSE_MODE_PREF_STRING, DEFAULT_ABSOLUTE_MOUSE_MODE);
