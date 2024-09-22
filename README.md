@@ -7,6 +7,10 @@
 - 3-finger swipe left/right fast twice: show navbar & status bar
 - 4-finger touch: reset mouse position & reset scale/translate
 - Onyx BOOX long-press nav bar back button: keyboard
+- Use shaders to make grayscale frames black-white for flicker avoidance on Onyx E-Ink devices
+- Use { and } to switch shaders
+- Audio-only mode, disable control mode
+- Use with https://github.com/ClassicOldSong/Apollo  v0.1.4-alpha.2
 
 # Moonlight Android
 

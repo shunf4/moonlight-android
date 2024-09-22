@@ -181,6 +181,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private TextView notificationOverlayView;
     private int requestedNotificationOverlayVisibility = View.GONE;
     private TextView performanceOverlayView;
+    private TextView channelDisabledHintView;
 
     private MediaCodecDecoderRenderer decoderRenderer;
     private boolean reportedCrash;
@@ -391,6 +392,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         notificationOverlayView = findViewById(R.id.notificationOverlay);
 
         performanceOverlayView = findViewById(R.id.performanceOverlay);
+        channelDisabledHintView = findViewById(R.id.channelDisabledHint);
 
         if (prefConfig.shouldDisableControl) {
             inputCaptureProvider = new NullCaptureProvider();
@@ -495,6 +497,26 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         // Check if the user has enabled performance stats overlay
         if (prefConfig.enablePerfOverlay) {
             performanceOverlayView.setVisibility(View.VISIBLE);
+        }
+
+        if (prefConfig.shouldDisableVideo && prefConfig.shouldDisableAudio && prefConfig.shouldDisableControl) {
+            channelDisabledHintView.setVisibility(View.VISIBLE);
+            channelDisabledHintView.setText("[ NO CHANNEL ]");
+        }
+
+        if (prefConfig.shouldDisableVideo && prefConfig.shouldDisableAudio && !prefConfig.shouldDisableControl) {
+            channelDisabledHintView.setVisibility(View.VISIBLE);
+            channelDisabledHintView.setText("[ CONTROL ONLY ]");
+        }
+
+        if (prefConfig.shouldDisableVideo && !prefConfig.shouldDisableAudio && prefConfig.shouldDisableControl) {
+            channelDisabledHintView.setVisibility(View.VISIBLE);
+            channelDisabledHintView.setText("[ AUDIO ONLY ]");
+        }
+
+        if (prefConfig.shouldDisableVideo && !prefConfig.shouldDisableAudio && !prefConfig.shouldDisableControl) {
+            channelDisabledHintView.setVisibility(View.VISIBLE);
+            channelDisabledHintView.setText("[ AUDIO ONLY ]\n\n\n[ CONTROLLABLE ]");
         }
 
         decoderRenderer = new MediaCodecDecoderRenderer(
@@ -606,10 +628,10 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 ;
 
         if (prefConfig.shouldDisableVideo && prefConfig.shouldLowerProfileWhenDisableVideo) {
-            configBuild = configBuild.setResolution(50, 50);
+            configBuild = configBuild.setResolution(320, 240);
 //            configBuild = configBuild.setLaunchRefreshRate(2);
 //            configBuild = configBuild.setRefreshRate(2);
-            configBuild = configBuild.setBitrate(100);
+            configBuild = configBuild.setBitrate(20);
         }
 
         StreamConfiguration config = configBuild.build();

@@ -23,6 +23,20 @@
     </com.limelight.ui.StreamView>
 
     <TextView
+        android:id="@+id/channelDisabledHint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="10dp"
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="10dp"
+        android:layout_gravity="center"
+        android:textAppearance="?android:attr/textAppearanceLarge"
+        android:gravity="center"
+        android:background="#80000000"
+        android:preferKeepClear="true"
+        android:visibility="gone" />
+
+    <TextView
         android:id="@+id/performanceOverlay"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
