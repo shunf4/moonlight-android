@@ -627,11 +627,12 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 .setPersistGamepadsAfterDisconnect(!prefConfig.multiController)
                 ;
 
+//        if (prefConfig.shouldLowerProfileWhenDisableVideo) {
         if (prefConfig.shouldDisableVideo && prefConfig.shouldLowerProfileWhenDisableVideo) {
-            configBuild = configBuild.setResolution(320, 240);
+            configBuild = configBuild.setResolution(240, 160);
 //            configBuild = configBuild.setLaunchRefreshRate(2);
 //            configBuild = configBuild.setRefreshRate(2);
-            configBuild = configBuild.setBitrate(20);
+            configBuild = configBuild.setBitrate(560); // is magic, please search in code
         }
 
         StreamConfiguration config = configBuild.build();
