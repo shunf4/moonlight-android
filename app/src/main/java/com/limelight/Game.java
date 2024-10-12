@@ -629,10 +629,18 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
 //        if (prefConfig.shouldLowerProfileWhenDisableVideo) {
         if (prefConfig.shouldDisableVideo && prefConfig.shouldLowerProfileWhenDisableVideo) {
-            configBuild = configBuild.setResolution(240, 160);
+            configBuild = configBuild.setResolution(144, 108);
 //            configBuild = configBuild.setLaunchRefreshRate(2);
 //            configBuild = configBuild.setRefreshRate(2);
-            configBuild = configBuild.setBitrate(560); // is magic, please search in code
+            configBuild = configBuild.setBitrate(222); // is magic, to enable high-quality audio, please search in code
+        }
+
+        if (prefConfig.shouldDisableVideo && prefConfig.shouldDisableAudio) {
+            configBuild = configBuild.setBitrate(120);
+        }
+
+        if (prefConfig.shouldDisableAudio) {
+            // configBuild = configBuild.setAudioConfiguration(new MoonBridge.AudioConfiguration(1, 0x1));
         }
 
         StreamConfiguration config = configBuild.build();
