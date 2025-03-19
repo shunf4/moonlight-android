@@ -1860,8 +1860,8 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
     private void sendEmulatedMouseScroll(short x, short y) {
         Vector2d vector = convertRawStickAxisToPixelMovement(x, y);
         if (vector.getMagnitude() >= 1) {
-            conn.sendMouseHighResScroll((short)vector.getY());
-            conn.sendMouseHighResHScroll((short)vector.getX());
+            conn.sendMouseHighResScroll((short)(vector.getY() * prefConfig.scrollFactor2));
+            conn.sendMouseHighResHScroll((short)(vector.getX() * prefConfig.scrollFactor2));
         }
     }
 

@@ -172,6 +172,7 @@ public class AbsoluteTouchContext implements TouchContext {
     private final int outerScreenHeight;
 
     private final int edgeSingleFingerScrollWidth;
+    private final float scrollFactor2;
 
     private boolean leftButtonAlreadyUp;
 
@@ -196,6 +197,7 @@ public class AbsoluteTouchContext implements TouchContext {
                                 int outerScreenWidth, int outerScreenHeight,
                                 boolean modeLongPressNeededToDrag,
                                 int edgeSingleFingerScrollWidth,
+                                float scrollFactor2,
                                 boolean shouldDoubleClickDragTranslate,
                                 boolean absoluteTouchTapOnlyPlacesMouse,
                                 Vibrator vibrator,
@@ -221,6 +223,7 @@ public class AbsoluteTouchContext implements TouchContext {
 
         this.modeLongPressNeededToDrag = modeLongPressNeededToDrag;
         this.edgeSingleFingerScrollWidth = edgeSingleFingerScrollWidth;
+        this.scrollFactor2 = scrollFactor2;
         this.shouldDoubleClickDragTranslate = shouldDoubleClickDragTranslate;
         this.absoluteTouchTapOnlyPlacesMouse = absoluteTouchTapOnlyPlacesMouse;
         this.vibrator = vibrator;
@@ -553,7 +556,7 @@ public class AbsoluteTouchContext implements TouchContext {
                     && outerScreenWidth != 0 && decideIsSingleFingerScrollFromTouchX(lastTouchDownX))
                     && maxPointerCountInGesture == 1 && !confirmedScaleTranslateGetter.get())) {
                 hasEverScrolled = true;
-                conn.sendMouseHighResScroll((short) -((eventY - lastTouchLocationY) * SCROLL_SPEED_FACTOR));
+                conn.sendMouseHighResScroll((short) -((eventY - lastTouchLocationY) * SCROLL_SPEED_FACTOR * scrollFactor2));
             }
 
             if (modeLongPressNeededToDrag) {
@@ -621,7 +624,7 @@ public class AbsoluteTouchContext implements TouchContext {
             } else {
                 if (hasEverScrolled || distanceExceeds(eventX - lastTouchDownX, eventY - lastTouchDownY, TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD)) {
                     hasEverScrolled = true;
-                    conn.sendMouseHighResScroll((short) ((eventY - lastTouchLocationY) * SCROLL_SPEED_FACTOR));
+                    conn.sendMouseHighResScroll((short) ((eventY - lastTouchLocationY) * SCROLL_SPEED_FACTOR * scrollFactor2));
                 }
             }
         }

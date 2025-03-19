@@ -1007,6 +1007,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         backgroundTouchView.getHeight(),
                         prefConfig.modeLongPressNeededToDrag,
                         prefConfig.edgeSingleFingerScrollWidth,
+                        prefConfig.scrollFactor2,
                         prefConfig.shouldDoubleClickDragTranslate,
                         prefConfig.absoluteTouchTapOnlyPlacesMouse,
                         vibrator,
@@ -1033,6 +1034,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         backgroundTouchView.getWidth(),
                         backgroundTouchView.getHeight(),
                         prefConfig.edgeSingleFingerScrollWidth,
+                        prefConfig.scrollFactor2,
                         prefConfig.shouldDoubleClickDragTranslate,
                         prefConfig.shouldRelativeLongPressRightClick,
                         vibrator,
@@ -2330,8 +2332,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
                 if (event.getActionMasked() == MotionEvent.ACTION_SCROLL) {
                     // Send the vertical scroll packet
-                    conn.sendMouseHighResScroll((short)(event.getAxisValue(MotionEvent.AXIS_VSCROLL) * 120));
-                    conn.sendMouseHighResHScroll((short)(event.getAxisValue(MotionEvent.AXIS_HSCROLL) * 120));
+                    conn.sendMouseHighResScroll((short)(event.getAxisValue(MotionEvent.AXIS_VSCROLL) * 120 * prefConfig.scrollFactor2));
+                    conn.sendMouseHighResHScroll((short)(event.getAxisValue(MotionEvent.AXIS_HSCROLL) * 120 * prefConfig.scrollFactor2));
                 }
 
                 if ((changedButtons & MotionEvent.BUTTON_PRIMARY) != 0) {

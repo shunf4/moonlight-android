@@ -80,6 +80,7 @@ public class PreferenceConfiguration {
     private static final String SHOULD_USE_SHADER_8_PREF_STRING = "should_use_shader_8";
     private static final String SHOULD_USE_SHADER_9_PREF_STRING = "should_use_shader_9";
     private static final String EDGE_SINGLE_FINGER_SCROLL_WIDTH_PREF_STRING = "edge_single_finger_scroll_width";
+    private static final String SCROLL_FACTOR2_PREF_STRING = "scroll_factor2";
     private static final String LATENCY_TOAST_PREF_STRING = "checkbox_enable_post_stream_toast";
     private static final String FRAME_PACING_PREF_STRING = "frame_pacing";
     private static final String ABSOLUTE_MOUSE_MODE_PREF_STRING = "checkbox_absolute_mouse_mode";
@@ -129,6 +130,7 @@ public class PreferenceConfiguration {
     private static final boolean DEFAULT_SHOULD_DISABLE_CONTROL = false;
     private static final boolean DEFAULT_IS_CURR_DEVICE_LIKE_ONYX = Game.IS_ONYX_BOOX_DEVICE;
     private static final String DEFAULT_EDGE_SINGLE_FINGER_SCROLL_WIDTH = "150";
+    private static final String DEFAULT_SCROLL_FACTOR2 = "1";
     private static final String DEFAULT_AUDIO_CONFIG = "2"; // Stereo
     private static final boolean DEFAULT_LATENCY_TOAST = false;
     private static final String DEFAULT_FRAME_PACING = "latency";
@@ -197,6 +199,7 @@ public class PreferenceConfiguration {
     public boolean shouldUseShader8;
     public boolean shouldUseShader9;
     public int edgeSingleFingerScrollWidth;
+    public float scrollFactor2;
     public MoonBridge.AudioConfiguration audioConfiguration;
     public int framePacing;
     public boolean absoluteMouseMode;
@@ -669,6 +672,12 @@ public class PreferenceConfiguration {
         config.shouldUseShader8 = prefs.getBoolean(SHOULD_USE_SHADER_8_PREF_STRING, false);
         config.shouldUseShader9 = prefs.getBoolean(SHOULD_USE_SHADER_9_PREF_STRING, false);
         config.edgeSingleFingerScrollWidth = Integer.parseInt(prefs.getString(EDGE_SINGLE_FINGER_SCROLL_WIDTH_PREF_STRING, DEFAULT_EDGE_SINGLE_FINGER_SCROLL_WIDTH));
+        config.scrollFactor2 = 1.0F;
+        try {
+            config.scrollFactor2 = Float.parseFloat(prefs.getString(SCROLL_FACTOR2_PREF_STRING, DEFAULT_SCROLL_FACTOR2));
+        } catch (Exception e) {
+
+        }
         config.enableLatencyToast = prefs.getBoolean(LATENCY_TOAST_PREF_STRING, DEFAULT_LATENCY_TOAST);
         config.absoluteMouseMode = prefs.getBoolean(ABSOLUTE_MOUSE_MODE_PREF_STRING, DEFAULT_ABSOLUTE_MOUSE_MODE);
         config.enableAudioFx = prefs.getBoolean(ENABLE_AUDIO_FX_PREF_STRING, DEFAULT_ENABLE_AUDIO_FX);

@@ -229,6 +229,12 @@
             android:summary="edge_single_finger_scroll_width"
             android:inputType="numberSigned"
             android:defaultValue="150" />
+        <EditTextPreference
+            android:key="scroll_factor2"
+            android:title="scroll_factor2"
+            android:summary="scroll_factor2"
+            android:inputType="text"
+            android:defaultValue="1" />
         <CheckBoxPreference
             android:key="checkbox_mouse_nav_buttons"
             android:title="@string/title_checkbox_mouse_nav_buttons"

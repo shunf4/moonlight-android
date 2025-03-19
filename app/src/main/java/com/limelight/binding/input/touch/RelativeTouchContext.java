@@ -57,6 +57,7 @@ public class RelativeTouchContext implements TouchContext {
     private final int outerScreenWidth;
     private final int outerScreenHeight;
     private final int edgeSingleFingerScrollWidth;
+    private final float scrollFactor2;
     private final View targetView;
     private final PreferenceConfiguration prefConfig;
     private final Handler handler;
@@ -225,6 +226,7 @@ public class RelativeTouchContext implements TouchContext {
                                 View view, PreferenceConfiguration prefConfig,
                                 int outerScreenWidth, int outerScreenHeight,
                                 int edgeSingleFingerScrollWidth,
+                                float scrollFactor2,
                                 boolean shouldDoubleClickDragTranslate,
                                 boolean shouldRelativeLongPressRightClick,
                                 Vibrator vibrator,
@@ -253,6 +255,7 @@ public class RelativeTouchContext implements TouchContext {
         this.outerScreenWidth = outerScreenWidth;
         this.outerScreenHeight = outerScreenHeight;
         this.edgeSingleFingerScrollWidth = edgeSingleFingerScrollWidth;
+        this.scrollFactor2 = scrollFactor2;
         this.shouldDoubleClickDragTranslate = shouldDoubleClickDragTranslate;
         this.shouldRelativeLongPressRightClick = shouldRelativeLongPressRightClick;
         this.vibrator = vibrator;
@@ -732,7 +735,7 @@ public class RelativeTouchContext implements TouchContext {
                 if (pointerCount == 2) {
 
                 } else if (confirmedScroll) {
-                    conn.sendMouseHighResScroll((short) -(deltaY * SCROLL_SPEED_FACTOR));
+                    conn.sendMouseHighResScroll((short) -(deltaY * SCROLL_SPEED_FACTOR * scrollFactor2));
                 } else if (confirmedDoubleClickDragTransform) {
                     scaleTransformCallback.report(eventX - originalTouchX, eventY - originalTouchY, 1.0, false);
                 } else {
@@ -751,7 +754,7 @@ public class RelativeTouchContext implements TouchContext {
             else {
                 if (actionIndex == 1 && pointerCount == 2) {
                     if (confirmedScroll && !confirmedScaleTranslateGetter.get()) {
-                        conn.sendMouseHighResScroll((short)(deltaY * SCROLL_SPEED_FACTOR));
+                        conn.sendMouseHighResScroll((short)(deltaY * SCROLL_SPEED_FACTOR * scrollFactor2));
                     }
                 }
 
