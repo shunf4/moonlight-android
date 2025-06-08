@@ -1,7 +1,9 @@
 package com.limelight.ui;
 
 import android.annotation.TargetApi;
+import android.content.ClipData;
 import android.content.Context;
+import android.text.ClipboardManager;
 import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.opengl.EGL14;
@@ -17,11 +19,14 @@ import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.view.KeyEvent;
 import android.view.SurfaceView;
+import android.view.View;
+import android.view.ViewGroup;
 
 public class StreamView extends SurfaceView {
     private double desiredAspectRatio;
     private Rect simulatedInitialRectFromAspectRatio = null;
     private InputCallbacks inputCallbacks;
+    private boolean fillDisplay = false;
 
     public void setDesiredAspectRatio(double aspectRatio) {
         this.desiredAspectRatio = aspectRatio;
@@ -59,6 +64,10 @@ public class StreamView extends SurfaceView {
         this.inputCallbacks = callbacks;
     }
 
+    public void setFillDisplay(boolean fillDisplay) {
+        this.fillDisplay = fillDisplay;
+    }
+
     public StreamView(Context context) {
         super(context);
     }
@@ -90,12 +99,23 @@ public class StreamView extends SurfaceView {
         int heightSize = MeasureSpec.getSize(heightMeasureSpec);
 
         int measuredHeight, measuredWidth;
-        if (widthSize > heightSize * desiredAspectRatio) {
-            measuredHeight = heightSize;
-            measuredWidth = (int)(measuredHeight * desiredAspectRatio);
-        } else {
-            measuredWidth = widthSize;
-            measuredHeight = (int)(measuredWidth / desiredAspectRatio);
+        if (fillDisplay) {
+            if (widthSize < heightSize * desiredAspectRatio) {
+                measuredHeight = heightSize;
+                measuredWidth = (int)(heightSize * desiredAspectRatio);
+            } else {
+                measuredWidth = widthSize;
+                measuredHeight = (int)(widthSize / desiredAspectRatio);
+            }
+        }
+        else {
+            if (widthSize > heightSize * desiredAspectRatio) {
+                measuredHeight = heightSize;
+                measuredWidth = (int)(measuredHeight * desiredAspectRatio);
+            } else {
+                measuredWidth = widthSize;
+                measuredHeight = (int)(measuredWidth / desiredAspectRatio);
+            }
         }
 
         setMeasuredDimension(measuredWidth, measuredHeight);
@@ -123,8 +143,17 @@ public class StreamView extends SurfaceView {
         return super.onKeyPreIme(keyCode, event);
     }
 
+    @Override
+    public void onWindowFocusChanged(boolean hasWindowFocus) {
+        super.onWindowFocusChanged(hasWindowFocus);
+        if (inputCallbacks != null) {
+            inputCallbacks.handleFocusChange(hasWindowFocus);
+        }
+    }
+
     public interface InputCallbacks {
         boolean handleKeyUp(KeyEvent event);
         boolean handleKeyDown(KeyEvent event);
+        boolean handleFocusChange(boolean hasWindowFocus);
     }
 }

@@ -31,6 +31,7 @@ import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -46,6 +47,8 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.AdapterView.AdapterContextMenuInfo;
+
+import androidx.annotation.Nullable;
 
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -64,12 +67,17 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
     private boolean showHiddenApps;
     private HashSet<Integer> hiddenAppIds = new HashSet<>();
 
+    private PreferenceConfiguration prefConfig;
+
     private final static int START_OR_RESUME_ID = 1;
     private final static int QUIT_ID = 2;
     private final static int START_WITH_QUIT = 4;
     private final static int VIEW_DETAILS_ID = 5;
     private final static int CREATE_SHORTCUT_ID = 6;
-    private final static int HIDE_APP_ID = 7;
+    private final static int EXPORT_LAUNCHER_FILE_ID = 7;
+    private final static int HIDE_APP_ID = 8;
+    private final static int START_WITH_VDISPLAY = 20;
+    private final static int START_WITH_QUIT_VDISPLAY = 21;
 
     public final static String HIDDEN_APPS_PREF_FILENAME = "HiddenApps";
 
@@ -161,11 +169,13 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
 
+        this.prefConfig = PreferenceConfiguration.readPreferences(this);
+
         // If appGridAdapter is initialized, let it know about the configuration change.
         // If not, it will pick it up when it initializes.
         if (appGridAdapter != null) {
             // Update the app grid adapter to create grid items with the correct layout
-            appGridAdapter.updateLayoutWithPreferences(this, PreferenceConfiguration.readPreferences(this));
+            appGridAdapter.updateLayoutWithPreferences(this, this.prefConfig);
 
             try {
                 // Reinflate the app grid itself to pick up the layout change
@@ -203,7 +213,7 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
                         @Override
                         public void run() {
                             // Display a toast to the user and quit the activity
-                            Toast.makeText(AppView.this, getResources().getText(R.string.lost_connection), Toast.LENGTH_SHORT).show();
+                            Toast.makeText(AppView.this, R.string.lost_connection, Toast.LENGTH_SHORT).show();
                             finish();
                         }
                     });
@@ -221,7 +231,7 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
                                     getResources().getString(R.string.scut_not_paired));
 
                             // Display a toast to the user and quit the activity
-                            Toast.makeText(AppView.this, getResources().getText(R.string.scut_not_paired), Toast.LENGTH_SHORT).show();
+                            Toast.makeText(AppView.this, R.string.scut_not_paired, Toast.LENGTH_SHORT).show();
                             finish();
                         }
                     });
@@ -314,6 +324,8 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
         setTitle(computerName);
         label.setText(computerName);
 
+        this.prefConfig = PreferenceConfiguration.readPreferences(this);
+
         // Bind to the computer manager service
         bindService(new Intent(this, ComputerManagerService.class), serviceConnection,
                 Service.BIND_AUTO_CREATE);
@@ -389,6 +401,25 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
     }
 
     @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == ShortcutHelper.REQUEST_CODE_EXPORT_ART_FILE) {
+            if (resultCode == Activity.RESULT_OK && data != null && data.getData() != null) {
+                Uri uri = data.getData();
+                ShortcutHelper.writeArtFileToUri(this, uri);
+            } else {
+                // Clear the content if the user cancelled or if there was an error before this point
+                ShortcutHelper.artFileContentToExport = null;
+                // Show "File export cancelled." toast only if the user explicitly cancelled.
+                if (resultCode == Activity.RESULT_CANCELED) { 
+                    Toast.makeText(this, R.string.file_export_cancelled, Toast.LENGTH_SHORT).show();
+                }
+            }
+        }
+    }
+
+    @Override
     public void onCreateContextMenu(ContextMenu menu, View v, ContextMenuInfo menuInfo) {
         super.onCreateContextMenu(menu, v, menuInfo);
 
@@ -397,13 +428,25 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
 
         menu.setHeaderTitle(selectedApp.app.getAppName());
 
-        if (lastRunningAppId != 0) {
+        if (lastRunningAppId == 0) {
+            if (prefConfig.useVirtualDisplay) {
+                menu.add(Menu.NONE, START_OR_RESUME_ID, 1, getResources().getString(R.string.applist_menu_start_primarydisplay));
+            } else {
+                menu.add(Menu.NONE, START_WITH_VDISPLAY, 1, getResources().getString(R.string.applist_menu_start_vdisplay));
+            }
+        } else {
             if (lastRunningAppId == selectedApp.app.getAppId()) {
                 menu.add(Menu.NONE, START_OR_RESUME_ID, 1, getResources().getString(R.string.applist_menu_resume));
                 menu.add(Menu.NONE, QUIT_ID, 2, getResources().getString(R.string.applist_menu_quit));
             }
             else {
-                menu.add(Menu.NONE, START_WITH_QUIT, 1, getResources().getString(R.string.applist_menu_quit_and_start));
+                if (prefConfig.useVirtualDisplay) {
+                    menu.add(Menu.NONE, START_WITH_QUIT_VDISPLAY, 1, getResources().getString(R.string.applist_menu_quit_and_start));
+                    menu.add(Menu.NONE, START_WITH_QUIT, 2, getResources().getString(R.string.applist_menu_quit_and_start_primarydisplay));
+                } else{
+                    menu.add(Menu.NONE, START_WITH_QUIT, 1, getResources().getString(R.string.applist_menu_quit_and_start));
+                    menu.add(Menu.NONE, START_WITH_QUIT_VDISPLAY, 2, getResources().getString(R.string.applist_menu_quit_and_start_vdisplay));
+                }
             }
         }
 
@@ -429,6 +472,8 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
                 }
             }
         }
+
+        menu.add(Menu.NONE, EXPORT_LAUNCHER_FILE_ID, 6, getResources().getString(R.string.applist_menu_export_launcher));
     }
 
     @Override
@@ -439,23 +484,53 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
     public boolean onContextItemSelected(MenuItem item) {
         AdapterContextMenuInfo info = (AdapterContextMenuInfo) item.getMenuInfo();
         final AppObject app = (AppObject) appGridAdapter.getItem(info.position);
-        switch (item.getItemId()) {
+        int itemId = item.getItemId();
+        switch (itemId) {
             case START_WITH_QUIT:
-                // Display a confirmation dialog first
-                UiHelper.displayQuitConfirmationDialog(this, new Runnable() {
-                    @Override
-                    public void run() {
-                        ServerHelper.doStart(AppView.this, app.app, computer, managerBinder);
-                    }
-                }, null);
+            case START_WITH_QUIT_VDISPLAY: {
+                boolean withVDiaplay = itemId == START_WITH_QUIT_VDISPLAY;
+                if (withVDiaplay && !(computer.vDisplaySupported && computer.vDisplayDriverReady)) {
+                    UiHelper.displayVdisplayConfirmationDialog(
+                        AppView.this,
+                        computer,
+                        () -> UiHelper.displayQuitConfirmationDialog(this, new Runnable() {
+                            @Override
+                            public void run() {
+                                ServerHelper.doStart(AppView.this, app.app, computer, managerBinder, true);
+                            }
+                        }, null),
+                        null
+                    );
+                } else {
+                    // Display a confirmation dialog first
+                    UiHelper.displayQuitConfirmationDialog(this, new Runnable() {
+                        @Override
+                        public void run() {
+                            ServerHelper.doStart(AppView.this, app.app, computer, managerBinder, withVDiaplay);
+                        }
+                    }, null);
+                }
                 return true;
+            }
 
             case START_OR_RESUME_ID:
-                // Resume is the same as start for us
-                ServerHelper.doStart(AppView.this, app.app, computer, managerBinder);
+            case START_WITH_VDISPLAY: {
+                boolean withVDiaplay = itemId == START_WITH_VDISPLAY;
+                if (withVDiaplay && !(computer.vDisplaySupported && computer.vDisplayDriverReady)) {
+                    UiHelper.displayVdisplayConfirmationDialog(
+                            AppView.this,
+                            computer,
+                            () -> ServerHelper.doStart(AppView.this, app.app, computer, managerBinder, true),
+                            null
+                    );
+                } else {
+                    // Resume is the same as start for us
+                    ServerHelper.doStart(AppView.this, app.app, computer, managerBinder, withVDiaplay);
+                }
                 return true;
+            }
 
-            case QUIT_ID:
+            case QUIT_ID: {
                 // Display a confirmation dialog first
                 UiHelper.displayQuitConfirmationDialog(this, new Runnable() {
                     @Override
@@ -463,45 +538,66 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
                         suspendGridUpdates = true;
                         ServerHelper.doQuit(AppView.this, computer,
                                 app.app, managerBinder, new Runnable() {
-                            @Override
-                            public void run() {
-                                // Trigger a poll immediately
-                                suspendGridUpdates = false;
-                                if (poller != null) {
-                                    poller.pollNow();
-                                }
-                            }
-                        });
+                                    @Override
+                                    public void run() {
+                                        // Trigger a poll immediately
+                                        suspendGridUpdates = false;
+                                        if (poller != null) {
+                                            poller.pollNow();
+                                        }
+                                    }
+                                });
                     }
                 }, null);
                 return true;
+            }
 
-            case VIEW_DETAILS_ID:
+            case VIEW_DETAILS_ID: {
                 Dialog.displayDialog(AppView.this, getResources().getString(R.string.title_details), app.app.toString(), false);
                 return true;
+            }
 
-            case HIDE_APP_ID:
+            case HIDE_APP_ID: {
                 if (item.isChecked()) {
                     // Transitioning hidden to shown
                     hiddenAppIds.remove(app.app.getAppId());
-                }
-                else {
+                } else {
                     // Transitioning shown to hidden
                     hiddenAppIds.add(app.app.getAppId());
                 }
                 updateHiddenApps(false);
                 return true;
+            }
 
-            case CREATE_SHORTCUT_ID:
+            case CREATE_SHORTCUT_ID: {
                 ImageView appImageView = info.targetView.findViewById(R.id.grid_image);
-                Bitmap appBits = ((BitmapDrawable)appImageView.getDrawable()).getBitmap();
+                Bitmap appBits = ((BitmapDrawable) appImageView.getDrawable()).getBitmap();
                 if (!shortcutHelper.createPinnedGameShortcut(computer, app.app, appBits)) {
                     Toast.makeText(AppView.this, getResources().getString(R.string.unable_to_pin_shortcut), Toast.LENGTH_LONG).show();
                 }
                 return true;
+            }
 
-            default:
+            case EXPORT_LAUNCHER_FILE_ID: {
+                if (app.app.getAppUUID() == null || (app.app.getAppUUID() != null && app.app.getAppUUID().isEmpty())) {
+                    UiHelper.displayConfirmationDialog(
+                            AppView.this,
+                            getResources().getString(R.string.title_export_sunshine_launcher_file),
+                            getResources().getString(R.string.message_export_sunshine_launcher_file),
+                            getResources().getString(R.string.proceed),
+                            getResources().getString(R.string.cancel),
+                            () -> shortcutHelper.exportLauncherFile(computer, app.app),
+                            null
+                    );
+                } else {
+                    shortcutHelper.exportLauncherFile(computer, app.app);
+                }
+                return true;
+            }
+
+            default: {
                 return super.onContextItemSelected(item);
+            }
         }
     }
 
@@ -597,7 +693,7 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
 
                     // This app was removed in the latest app list
                     if (!foundExistingApp) {
-                        shortcutHelper.disableAppShortcut(computer, existingApp.app, "App removed from PC");
+                        shortcutHelper.disableAppShortcut(computer, existingApp.app, getString(R.string.app_removed_from_pc));
                         appGridAdapter.removeApp(existingApp);
                         updated = true;
 
@@ -634,9 +730,22 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
 
                 // Only open the context menu if something is running, otherwise start it
                 if (lastRunningAppId != 0) {
-                    openContextMenu(arg1);
+                    if (prefConfig.resumeWithoutConfirm && lastRunningAppId == app.app.getAppId()) {
+                        ServerHelper.doStart(AppView.this, app.app, computer, managerBinder, prefConfig.useVirtualDisplay);
+                    } else {
+                        openContextMenu(arg1);
+                    }
                 } else {
-                    ServerHelper.doStart(AppView.this, app.app, computer, managerBinder);
+                    if (prefConfig.useVirtualDisplay && !(computer.vDisplaySupported && computer.vDisplayDriverReady)) {
+                        UiHelper.displayVdisplayConfirmationDialog(
+                                AppView.this,
+                                computer,
+                                () -> ServerHelper.doStart(AppView.this, app.app, computer, managerBinder, true),
+                                null
+                        );
+                    } else {
+                        ServerHelper.doStart(AppView.this, app.app, computer, managerBinder, prefConfig.useVirtualDisplay);
+                    }
                 }
             }
         });

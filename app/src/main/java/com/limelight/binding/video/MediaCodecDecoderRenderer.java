@@ -21,7 +21,9 @@ import com.limelight.R;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer;
 import com.limelight.nvstream.jni.MoonBridge;
 import com.limelight.preferences.PreferenceConfiguration;
+import com.limelight.utils.TrafficStatsHelper;
 
+import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
@@ -36,6 +38,7 @@ import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
 import android.media.MediaCodec.BufferInfo;
 import android.media.MediaCodec.CodecException;
+import android.net.TrafficStats;
 import android.opengl.EGL14;
 import android.opengl.EGLConfig;
 import android.opengl.EGLContext;
@@ -55,7 +58,7 @@ import android.util.Log;
 import android.util.Range;
 import android.view.Choreographer;
 import android.view.Surface;
-import android.view.SurfaceHolder;
+import android.view.Surface;
 
 public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements Choreographer.FrameCallback {
 
@@ -89,9 +92,10 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     private byte optimalSlicesPerFrame;
     private boolean refFrameInvalidationActive;
     private int initialWidth, initialHeight;
+    private boolean invertResolution;
     private int surfaceWidth = 300, surfaceHeight = 300;
     private int videoFormat;
-    private SurfaceHolder renderTarget;
+    private Surface renderTarget;
     private volatile boolean stopping;
     private CrashListener crashListener;
     private boolean reportedCrash;
@@ -137,6 +141,10 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     private int refreshRate;
     private PreferenceConfiguration prefs;
 
+    private float minDecodeTime = Float.MAX_VALUE;
+    private String minDecodeTimeFullLog = "";
+
+    private long lastNetDataNum;
     private LinkedBlockingQueue<Integer> outputBufferQueue = new LinkedBlockingQueue<>();
     private static final int OUTPUT_BUFFER_QUEUE_LIMIT = 2;
     private long lastRenderedFrameTimeNanos;
@@ -175,7 +183,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     private boolean decoderCanMeetPerformancePoint(MediaCodecInfo.VideoCapabilities caps, PreferenceConfiguration prefs) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaCodecInfo.VideoCapabilities.PerformancePoint targetPerfPoint = new MediaCodecInfo.VideoCapabilities.PerformancePoint(prefs.width, prefs.height, prefs.fps);
+            MediaCodecInfo.VideoCapabilities.PerformancePoint targetPerfPoint = new MediaCodecInfo.VideoCapabilities.PerformancePoint(initialWidth, initialHeight, Math.round(prefs.fps));
             List<MediaCodecInfo.VideoCapabilities.PerformancePoint> perfPoints = caps.getSupportedPerformancePoints();
             if (perfPoints != null) {
                 for (MediaCodecInfo.VideoCapabilities.PerformancePoint perfPoint : perfPoints) {
@@ -196,7 +204,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
             try {
                 // We'll ask the decoder what it can do for us at this resolution and see if our
                 // requested frame rate falls below or inside the range of achievable frame rates.
-                Range<Double> fpsRange = caps.getAchievableFrameRatesFor(prefs.width, prefs.height);
+                Range<Double> fpsRange = caps.getAchievableFrameRatesFor(initialWidth, initialHeight);
                 if (fpsRange != null) {
                     return prefs.fps <= fpsRange.getUpper();
                 }
@@ -211,7 +219,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         // As a last resort, we will use areSizeAndRateSupported() which is explicitly NOT a
         // performance metric, but it can work at least for the purpose of determining if
         // the codec is going to die when given a stream with the specified settings.
-        return caps.areSizeAndRateSupported(prefs.width, prefs.height, prefs.fps);
+        return caps.areSizeAndRateSupported(initialWidth, initialHeight, prefs.fps);
     }
 
     private boolean decoderCanMeetPerformancePointWithHevcAndNotAvc(MediaCodecInfo hevcDecoderInfo, MediaCodecInfo avcDecoderInfo, PreferenceConfiguration prefs) {
@@ -278,7 +286,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                     LimeLog.info("Forcing HEVC enabled for HDR streaming");
                 }
                 // > 4K streaming also requires HEVC, so force it on there too.
-                else if (prefs.width > 4096 || prefs.height > 4096) {
+                else if (initialWidth > 4096 || initialHeight > 4096) {
                     LimeLog.info("Forcing HEVC enabled for over 4K streaming");
                 }
                 // Use HEVC if the H.264 decoder is unable to meet the performance point
@@ -326,7 +334,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         return decoderInfo;
     }
 
-    public void setRenderTarget(SurfaceHolder renderTarget) {
+    public void setRenderTarget(Surface renderTarget) {
         this.renderTarget = renderTarget;
     }
 
@@ -337,7 +345,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
     public MediaCodecDecoderRenderer(Activity activity, PreferenceConfiguration prefs,
                                      CrashListener crashListener, int consecutiveCrashCount,
-                                     boolean meteredData, boolean requestedHdr,
+                                     boolean meteredData, boolean requestedHdr, boolean invertResolution,
                                      String glRenderer, PerfOverlayListener perfListener) {
         //dumpDecoders();
 
@@ -348,6 +356,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         this.consecutiveCrashCount = consecutiveCrashCount;
         this.glRenderer = glRenderer;
         this.perfListener = perfListener;
+        this.invertResolution = invertResolution;
 
         this.activeWindowVideoStats = new VideoStats();
         this.lastWindowVideoStats = new VideoStats();
@@ -384,7 +393,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         int hevcOptimalSlicesPerFrame = 0;
         if (avcDecoder != null) {
             directSubmit = MediaCodecHelper.decoderCanDirectSubmit(avcDecoder.getName());
-            refFrameInvalidationAvc = MediaCodecHelper.decoderSupportsRefFrameInvalidationAvc(avcDecoder.getName(), prefs.height);
+            refFrameInvalidationAvc = MediaCodecHelper.decoderSupportsRefFrameInvalidationAvc(avcDecoder.getName(), initialHeight);
             avcOptimalSlicesPerFrame = MediaCodecHelper.getDecoderOptimalSlicesPerFrame(avcDecoder.getName());
 
             if (directSubmit) {
@@ -543,7 +552,6 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                 }
             }
         }
-
         return videoFormat;
     }
 
@@ -1260,7 +1268,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                 }
             });
         } else {
-            videoDecoder.configure(format, renderTarget.getSurface(), null, 0);
+            videoDecoder.configure(format, renderTarget, null, 0);
         }
 
         configuredFormat = format;
@@ -1387,7 +1395,6 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
             LimeLog.severe("Unknown format");
             return -3;
         }
-
         adaptivePlayback = MediaCodecHelper.decoderSupportsAdaptivePlayback(selectedDecoderInfo, mimeType);
         fusedIdrFrame = MediaCodecHelper.decoderSupportsFusedIdrFrame(selectedDecoderInfo, mimeType);
 
@@ -1395,10 +1402,14 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
             LimeLog.info("Decoder configuration try: "+tryNumber);
 
             MediaFormat mediaFormat = createBaseMediaFormat(mimeType);
-
             // This will try low latency options until we find one that works (or we give up).
-            boolean newFormat = MediaCodecHelper.setDecoderLowLatencyOptions(mediaFormat, selectedDecoderInfo, tryNumber);
-
+            boolean newFormat = MediaCodecHelper.setDecoderLowLatencyOptions(mediaFormat, selectedDecoderInfo, prefs.enableUltraLowLatency, tryNumber);
+            //todo 色彩格式
+//            MediaCodecInfo.CodecCapabilities codecCapabilities = selectedDecoderInfo.getCapabilitiesForType(mimeType);
+//            int[] colorFormats=codecCapabilities.colorFormats;
+//            for (int colorFormat : colorFormats) {
+//                LimeLog.info("Decoder configuration colorFormats: "+colorFormat);
+//            }
             // Throw the underlying codec exception on the last attempt if the caller requested it
             if (tryConfigureDecoder(selectedDecoderInfo, mediaFormat, !newFormat && throwOnCodecError)) {
                 // Success!
@@ -1430,8 +1441,8 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
     @Override
     public int setup(int format, int width, int height, int redrawRate) {
-        this.initialWidth = width;
-        this.initialHeight = height;
+        this.initialWidth = invertResolution ? height : width;
+        this.initialHeight = invertResolution ? width : height;
         this.videoFormat = format;
         this.refreshRate = redrawRate;
 
@@ -2173,7 +2184,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
         // Flip stats windows roughly every second
         if (SystemClock.uptimeMillis() >= activeWindowVideoStats.measurementStartTimestamp + 1000) {
-            if (prefs.enablePerfOverlay) {
+            if (prefs.enablePerfOverlay || prefs.enablePerfLogging) {
                 VideoStats lastTwo = new VideoStats();
                 lastTwo.add(lastWindowVideoStats);
                 lastTwo.add(activeWindowVideoStats);
@@ -2193,24 +2204,74 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                 float decodeTimeMs = (float)lastTwo.decoderTimeMs / lastTwo.totalFramesReceived;
                 long rttInfo = MoonBridge.getEstimatedRttInfo();
                 StringBuilder sb = new StringBuilder();
-                sb.append(context.getString(R.string.perf_overlay_streamdetails, initialWidth + "x" + initialHeight, fps.totalFps)).append('\n');
-                sb.append(context.getString(R.string.perf_overlay_decoder, decoder)).append('\n');
-                sb.append(context.getString(R.string.perf_overlay_incomingfps, fps.receivedFps)).append('\n');
-                sb.append(context.getString(R.string.perf_overlay_renderingfps, fps.renderedFps)).append('\n');
-                sb.append(context.getString(R.string.perf_overlay_netdrops,
-                        (float)lastTwo.framesLost / lastTwo.totalFrames * 100)).append('\n');
-                sb.append(context.getString(R.string.perf_overlay_netlatency,
-                        (int)(rttInfo >> 32), (int)rttInfo)).append('\n');
-                if (lastTwo.framesWithHostProcessingLatency > 0) {
-                    sb.append(context.getString(R.string.perf_overlay_hostprocessinglatency,
-                            (float)lastTwo.minHostProcessingLatency / 10,
-                            (float)lastTwo.maxHostProcessingLatency / 10,
-                            (float)lastTwo.totalHostProcessingLatency / 10 / lastTwo.framesWithHostProcessingLatency)).append('\n');
+                if(prefs.enablePerfOverlayLite){
+                    if(TrafficStatsHelper.getPackageRxBytes(Process.myUid()) != TrafficStats.UNSUPPORTED){
+                        long netData=TrafficStatsHelper.getPackageRxBytes(Process.myUid())+TrafficStatsHelper.getPackageTxBytes(Process.myUid());
+                        if(lastNetDataNum!=0){
+                            sb.append(context.getString(R.string.perf_overlay_lite_bandwidth) + ": ");
+                            float realtimeNetData=(netData-lastNetDataNum)/1024f;
+                            if(realtimeNetData>=1000){
+                                sb.append(String.format("%.2f", realtimeNetData/1024f) +"M/s\t ");
+                            }else{
+                                sb.append(String.format("%.2f", realtimeNetData) +"K/s\t ");
+                            }
+                        }
+                        lastNetDataNum=netData;
+                    }
+//                    sb.append("分辨率：");
+//                    sb.append(initialWidth + "x" + initialHeight);
+                    sb.append(context.getString(R.string.perf_overlay_lite_network_decoding_delay) + ": ");
+                    sb.append(context.getString(R.string.perf_overlay_lite_net,(int)(rttInfo >> 32)));
+                    sb.append(" / ");
+                    sb.append(context.getString(R.string.perf_overlay_lite_dectime,decodeTimeMs));
+                    sb.append("\t");
+                    sb.append(context.getString(R.string.perf_overlay_lite_packet_loss) + ": ");
+                    sb.append(context.getString(R.string.perf_overlay_lite_netdrops,(float)lastTwo.framesLost / lastTwo.totalFrames * 100));
+                    sb.append("\t FPS：");
+                    sb.append(context.getString(R.string.perf_overlay_lite_fps,fps.totalFps));
+//                    sb.append("\n");
+//                    sb.append(context.getString(R.string.perf_overlay_lite_decoder,decoder));
+                }else{
+                    sb.append(context.getString(R.string.perf_overlay_streamdetails, initialWidth + "x" + initialHeight, fps.totalFps)).append('\n');
+                    sb.append(context.getString(R.string.perf_overlay_decoder, decoder)).append('\n');
+                    sb.append(context.getString(R.string.perf_overlay_incomingfps, fps.receivedFps)).append('\n');
+                    sb.append(context.getString(R.string.perf_overlay_renderingfps, fps.renderedFps)).append('\n');
+                    sb.append(context.getString(R.string.perf_overlay_netdrops,
+                            (float)lastTwo.framesLost / lastTwo.totalFrames * 100)).append('\n');
+                    if(TrafficStatsHelper.getPackageRxBytes(Process.myUid()) != TrafficStats.UNSUPPORTED){
+                        long netData=TrafficStatsHelper.getPackageRxBytes(Process.myUid())+TrafficStatsHelper.getPackageTxBytes(Process.myUid());
+                        if(lastNetDataNum!=0){
+                            sb.append(context.getString(R.string.perf_overlay_lite_bandwidth) + ": ");
+                            float realtimeNetData=(netData-lastNetDataNum)/1024f;
+                            if(realtimeNetData>=1000){
+                                sb.append(String.format("%.2f", realtimeNetData/1024f) +"M/s\n");
+                            }else{
+                                sb.append(String.format("%.2f", realtimeNetData) +"K/s\n");
+                            }
+                        }
+                        lastNetDataNum=netData;
+                    }
+                    sb.append(context.getString(R.string.perf_overlay_netlatency,
+                            (int)(rttInfo >> 32), (int)rttInfo)).append('\n');
+                    if (lastTwo.framesWithHostProcessingLatency > 0) {
+                        sb.append(context.getString(R.string.perf_overlay_hostprocessinglatency,
+                                (float)lastTwo.minHostProcessingLatency / 10,
+                                (float)lastTwo.maxHostProcessingLatency / 10,
+                                (float)lastTwo.totalHostProcessingLatency / 10 / lastTwo.framesWithHostProcessingLatency)).append('\n');
+                    }
+                    sb.append(context.getString(R.string.perf_overlay_dectime, decodeTimeMs));
                 }
-                sb.append(context.getString(R.string.perf_overlay_dectime, decodeTimeMs));
-                perfListener.onPerfUpdate(sb.toString());
+                String fullLog = sb.toString();
+                if(prefs.enablePerfOverlay) {
+                    perfListener.onPerfUpdate(fullLog);
+                }
+                // Best latency is only met at requested highest fps, rest can be ignored
+                Boolean targetFpsMatched = ((int) fps.totalFps == (int) prefs.fps);
+                if(minDecodeTime > decodeTimeMs && targetFpsMatched) {
+                    minDecodeTime = decodeTimeMs;
+                    minDecodeTimeFullLog = fullLog;
+                }
             }
-
             globalVideoStats.add(activeWindowVideoStats);
             lastWindowVideoStats.copy(activeWindowVideoStats);
             activeWindowVideoStats.clear();
@@ -2565,6 +2626,19 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
             return 0;
         }
         return (int)(globalVideoStats.decoderTimeMs / globalVideoStats.totalFramesReceived);
+    }
+
+    public Boolean performanceWasTracked() {
+        return minDecodeTime < Float.MAX_VALUE;
+    }
+
+    @SuppressLint("DefaultLocale")
+    public String getMinDecoderLatency() {
+        return String.format("%1$.2f", minDecodeTime);
+    }
+
+    public String getMinDecoderLatencyFullLog() {
+        return minDecodeTimeFullLog;
     }
 
     static class DecoderHungException extends RuntimeException {

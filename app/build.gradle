@@ -5,7 +5,7 @@ if (file("sign.gradle").exists()) {
 }
 
 android {
-    ndkVersion "21.4.7075529"
+    ndkVersion "27.0.12077973"
 
     compileSdk 34
 
@@ -15,8 +15,8 @@ android {
         minSdk 21
         targetSdk 34
 
-        versionName "12.1"
-        versionCode = 314
+        versionName "12.1.250605"
+        versionCode = 43
 
         // Generate native debug symbols to allow Google Play to symbolicate our native crashes
         ndk.debugSymbolLevel = 'FULL'
@@ -40,17 +40,25 @@ android {
                 }
             }
 
+            resValue "string",
+                    "obtainium_app_url",
+                    "data:text/html;base64,PGgxPlJvb3QgYnVpbGQgaXMgbm90IGF2YWlsYWJsZTwvaDE+"
+
             applicationId "com.limelight.root"
             dimension "root"
             buildConfigField "boolean", "ROOT_BUILD", "true"
         }
 
-        nonRoot {
+        nonRoot_game {
             externalNativeBuild {
                 ndkBuild {
                     arguments "PRODUCT_FLAVOR=nonRoot"
                 }
             }
+
+            resValue "string",
+                    "obtainium_app_url",
+                    "https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.limelight.noir%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FClassicOldSong%2Fmoonlight-android%22%2C%22author%22%3A%22ClassicOldSong%22%2C%22name%22%3A%22Artemis%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%5C%22nonRoot%5C%22%2C%5C%22matchGroutToUse%5C%22%3A%5C%22%241%5C%22%2C%5C%22versionExtractionRegEx%5C%22%3A%5C%22v(.%2B)%5C%22%7D%22%7D"
 
             applicationId "com.limelight"
             dimension "root"
@@ -85,9 +93,10 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix ".debug"
-            resValue "string", "app_label", "Moonlight (Debug)"
-            resValue "string", "app_label_root", "Moonlight (Root Debug)"
+            applicationIdSuffix ".noirdebug"
+            resValue "string", "app_label", "Diana"
+            resValue "string", "app_label_root", "Diana (Root)"
+            resValue "string", "app_label_game", "Diana (Game)"
 
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
@@ -124,8 +133,9 @@ android {
             //
             // TL;DR: Leave the following line alone!
             applicationIdSuffix ".shunf4_mod"
-            resValue "string", "app_label", "Moonlight (shunf4)"
-            resValue "string", "app_label_root", "Moonlight (Root)"
+            resValue "string", "app_label", "Artemis (shunf4)"
+            resValue "string", "app_label_root", "ArtemisRoot (shunf4)"
+            resValue "string", "app_label_game", "ArtemisGame (shunf4)"
 
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
@@ -172,4 +182,10 @@ dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'org.jmdns:jmdns:3.5.9'
     implementation 'com.github.cgutman:ShieldControllerExtensions:1.0.1'
+    implementation 'com.google.code.gson:gson:2.10.1'
+    implementation 'androidx.annotation:annotation:1.9.0'
+    implementation 'androidx.cardview:cardview:1.0.0'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.preference:preference:1.2.1'
+    implementation 'com.github.ByteHamster:SearchPreference:v2.5.1'
 }

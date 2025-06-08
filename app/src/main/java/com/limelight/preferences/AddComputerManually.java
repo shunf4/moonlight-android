@@ -10,8 +10,14 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.util.Collections;
+import java.util.Objects;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import com.limelight.AppView;
+import com.limelight.Game;
+import com.limelight.LimeLog;
+import com.limelight.PcView;
+import com.limelight.ShortcutTrampoline;
 import com.limelight.binding.PlatformBinding;
 import com.limelight.computers.ComputerManagerService;
 import com.limelight.R;
@@ -24,11 +30,13 @@ import com.limelight.utils.SpinnerDialog;
 import com.limelight.utils.UiHelper;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.Service;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.view.KeyEvent;
@@ -98,24 +106,20 @@ public class AddComputerManually extends Activity {
         }
     }
 
-    private URI parseRawUserInputToUri(String rawUserInput) {
-        try {
-            // Try adding a scheme and parsing the remaining input.
-            // This handles input like 127.0.0.1:47989, [::1], [::1]:47989, and 127.0.0.1.
-            URI uri = new URI("moonlight://" + rawUserInput);
-            if (uri.getHost() != null && !uri.getHost().isEmpty()) {
-                return uri;
-            }
-        } catch (URISyntaxException ignored) {}
+    private Uri parseRawUserInputToUri(String rawUserInput) {
+        // Try adding a scheme and parsing the remaining input.
+        // This handles input like 127.0.0.1:47989, [::1], [::1]:47989, and 127.0.0.1.
+        Uri uri = Uri.parse("art://" + rawUserInput);
+        if (uri.getHost() != null && !uri.getHost().isEmpty()) {
+            return uri;
+        }
 
-        try {
-            // Attempt to escape the input as an IPv6 literal.
-            // This handles input like ::1.
-            URI uri = new URI("moonlight://[" + rawUserInput + "]");
-            if (uri.getHost() != null && !uri.getHost().isEmpty()) {
-                return uri;
-            }
-        } catch (URISyntaxException ignored) {}
+        // Attempt to escape the input as an IPv6 literal.
+        // This handles input like ::1.
+        uri = Uri.parse("art://[" + rawUserInput + "]");
+        if (uri.getHost() != null && !uri.getHost().isEmpty()) {
+            return uri;
+        }
 
         return null;
     }
@@ -129,11 +133,11 @@ public class AddComputerManually extends Activity {
         SpinnerDialog dialog = SpinnerDialog.displayDialog(this, getResources().getString(R.string.title_add_pc),
             getResources().getString(R.string.msg_add_pc), false);
 
+        Uri uri = parseRawUserInputToUri(rawUserInput);
         try {
             ComputerDetails details = new ComputerDetails();
 
             // Check if we parsed a host address successfully
-            URI uri = parseRawUserInputToUri(rawUserInput);
             if (uri != null && uri.getHost() != null && !uri.getHost().isEmpty()) {
                 String host = uri.getHost();
                 int port = uri.getPort();
@@ -197,12 +201,26 @@ public class AddComputerManually extends Activity {
             AddComputerManually.this.runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                Toast.makeText(AddComputerManually.this, getResources().getString(R.string.addpc_success), Toast.LENGTH_LONG).show();
+                    Toast.makeText(AddComputerManually.this, getResources().getString(R.string.addpc_success), Toast.LENGTH_LONG).show();
 
-                if (!isFinishing()) {
-                    // Close the activity
-                    AddComputerManually.this.finish();
-                }
+                    if (!isFinishing()) {
+                        // Close the activity
+                        AddComputerManually.this.finish();
+                    }
+
+                    String pin = uri.getQueryParameter("pin");
+                    String passphrase = uri.getQueryParameter("passphrase");
+                    if (pin != null && passphrase != null) {
+                        Intent intent = new Intent(AddComputerManually.this, PcView.class);
+                        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
+                        intent.putExtra("hostname", uri.getHost());
+                        intent.putExtra("port", uri.getPort());
+                        intent.putExtra("pin", pin);
+                        intent.putExtra("passphrase", passphrase);
+
+                        startActivity(intent);
+                    }
+
                 }
             });
         }
@@ -268,6 +286,46 @@ public class AddComputerManually extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        String action = getIntent().getAction();
+
+        String server;
+        String query;
+        Uri data = getIntent().getData();
+        if (Intent.ACTION_VIEW.equals(action) && data != null) {
+            int port = data.getPort();
+
+            if (port == -1) {
+                String urlAction = data.getHost();
+                if (Objects.equals(urlAction, "launch")) {
+                    String hostUUID = data.getQueryParameter("host_uuid");
+                    String hostName = data.getQueryParameter("host_name");
+                    String appUUID = data.getQueryParameter("app_uuid");
+                    String appName = data.getQueryParameter("app_name");
+                    String appID = data.getQueryParameter("app_id");
+
+                    Intent intent = new Intent(AddComputerManually.this, ShortcutTrampoline.class);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
+                    intent.putExtra(AppView.UUID_EXTRA, hostUUID);
+                    intent.putExtra(AppView.NAME_EXTRA, hostName);
+                    intent.putExtra(Game.EXTRA_APP_UUID, appUUID);
+                    intent.putExtra(Game.EXTRA_APP_NAME, appName);
+                    intent.putExtra(Game.EXTRA_APP_ID, appID);
+
+                    finish();
+
+                    startActivity(intent);
+
+                    return;
+                }
+            }
+
+            server = data.getAuthority();
+            query = data.getQuery();
+        } else {
+            query = null;
+            server = null;
+        }
+
         UiHelper.setLocale(this);
 
         setContentView(R.layout.activity_add_computer_manually);
@@ -306,6 +364,38 @@ public class AddComputerManually extends Activity {
         // Bind to the ComputerManager service
         bindService(new Intent(AddComputerManually.this,
                     ComputerManagerService.class), serviceConnection, Service.BIND_AUTO_CREATE);
+
+
+        // Check if we have been called from deep link
+        if (data == null || server == null || query == null) {
+            return;
+        }
+
+        hostText.setText(server);
+
+        if (!query.isEmpty()) {
+            String hostName = data.getQueryParameter("name");
+            if (hostName != null && !hostName.isEmpty()) {
+                hostName = hostName + " (" + server + ")";
+            } else {
+                hostName = server;
+            }
+
+            AlertDialog.Builder builder = new AlertDialog.Builder(this);
+            builder.setTitle(R.string.pair_pc_confirm_title);
+            builder.setMessage(getString(R.string.pair_pc_confirm_message, hostName));
+
+            builder.setPositiveButton(getString(R.string.proceed), (dialog, which) -> {
+                dialog.dismiss();
+                finish();
+                computersToAdd.add(server + '?' + query);
+            });
+
+            builder.setNegativeButton(getString(R.string.cancel), (dialog, which) -> dialog.dismiss());
+
+            AlertDialog dialog = builder.create();
+            dialog.show();
+        }
     }
 
     // Returns true if the event should be eaten

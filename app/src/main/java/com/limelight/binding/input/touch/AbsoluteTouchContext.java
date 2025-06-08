@@ -56,6 +56,9 @@ public class AbsoluteTouchContext implements TouchContext {
     private final boolean modeLongPressNeededToDrag;
     private final boolean absoluteTouchTapOnlyPlacesMouse;
     private final Vibrator vibrator;
+    
+    private final byte buttonPrimary;
+    private final byte buttonSecondary;
 
     private final Runnable longPressRightClickRunnable = new Runnable() {
         @Override
@@ -71,13 +74,13 @@ public class AbsoluteTouchContext implements TouchContext {
             if (confirmedMouseLeftButtonDown) {
                 if (!leftButtonAlreadyUp) {
                     leftButtonAlreadyUp = true;
-                    conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_LEFT);
+                    conn.sendMouseButtonUp(buttonPrimary);
                 }
                 confirmedMouseLeftButtonDown = false;
             } else {
                 AbsoluteTouchContext.this.updatePosition(lastTouchLocationX ,lastTouchLocationY, lastTouchLocationXRel, lastTouchLocationYRel);
             }
-//            conn.sendMouseButtonDown(MouseButtonPacket.BUTTON_RIGHT);
+//            conn.sendMouseButtonDown(buttonSecondary);
             confirmedLongPressRightClick = true;
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -179,7 +182,7 @@ public class AbsoluteTouchContext implements TouchContext {
     private final Runnable leftButtonUpRunnable = new Runnable() {
         @Override
         public void run() {
-            conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_LEFT);
+            conn.sendMouseButtonUp(buttonPrimary);
         }
     };
 
@@ -193,7 +196,7 @@ public class AbsoluteTouchContext implements TouchContext {
     private static final int TOUCH_DOWN_DEAD_ZONE_TIME_THRESHOLD = 100;
     private static final int TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD = 20;
 
-    public AbsoluteTouchContext(NvConnection conn, int actionIndex, View view,
+    public AbsoluteTouchContext(NvConnection conn, int actionIndex, View view, boolean swapped,
                                 int outerScreenWidth, int outerScreenHeight,
                                 boolean modeLongPressNeededToDrag,
                                 int edgeSingleFingerScrollWidth,
@@ -217,6 +220,15 @@ public class AbsoluteTouchContext implements TouchContext {
         this.actionIndex = actionIndex;
         this.targetView = view;
         this.handler = new Handler(Looper.getMainLooper());
+
+        if (swapped) {
+            buttonPrimary = MouseButtonPacket.BUTTON_RIGHT;
+            buttonSecondary = MouseButtonPacket.BUTTON_LEFT;
+        }
+        else {
+            buttonPrimary = MouseButtonPacket.BUTTON_LEFT;
+            buttonSecondary = MouseButtonPacket.BUTTON_RIGHT;
+        }
 
         this.outerScreenWidth = outerScreenWidth;
         this.outerScreenHeight = outerScreenHeight;
@@ -388,12 +400,12 @@ public class AbsoluteTouchContext implements TouchContext {
             if (confirmedLongPressRightClick) {
                 doRightTap();
                 handler.postDelayed(() -> {
-                    conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_RIGHT);
+                    conn.sendMouseButtonUp(buttonSecondary);
                 }, 100);
             } else if (confirmedMouseLeftButtonDown && !leftButtonAlreadyUp) {
                 // including hold
                 leftButtonAlreadyUp = true;
-                conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_LEFT);
+                conn.sendMouseButtonUp(buttonPrimary);
                 lastMouseLeftClickX = eventX;
                 lastMouseLeftClickY = eventY;
             } else {
@@ -486,7 +498,7 @@ public class AbsoluteTouchContext implements TouchContext {
         if (absoluteTouchTapOnlyPlacesMouse && distanceExceeds && !isAboutToHold) {
             // do not click
         } else {
-            conn.sendMouseButtonDown(MouseButtonPacket.BUTTON_LEFT);
+            conn.sendMouseButtonDown(buttonPrimary);
             leftButtonAlreadyUp = false;
         }
     }
@@ -649,10 +661,10 @@ public class AbsoluteTouchContext implements TouchContext {
 
         // Raise the mouse buttons
         if (confirmedLongPressRightClick) {
-            conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_RIGHT);
+            conn.sendMouseButtonUp(buttonSecondary);
         }
         else if (confirmedLongPressHold) {
-            conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_LEFT);
+            conn.sendMouseButtonUp(buttonPrimary);
             leftButtonAlreadyUp = true;
         }
         else if (confirmedMouseLeftButtonDown) {

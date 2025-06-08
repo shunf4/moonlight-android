@@ -1,5 +1,7 @@
 package com.limelight.nvstream;
 
+import static java.lang.Thread.sleep;
+
 import android.app.ActivityManager;
 import android.content.Context;
 import android.net.ConnectivityManager;
@@ -311,7 +313,7 @@ public class NvConnection {
         if (h.getCurrentGame(serverInfo) != 0) {
             try {
                 if (h.getCurrentGame(serverInfo) == app.getAppId()) {
-                    if (!h.launchApp(context, "resume", app.getAppId(), context.negotiatedHdr)) {
+                    if (!h.launchApp(context, "resume", app.getAppUUID(), app.getAppId(), context.negotiatedHdr)) {
                         context.connListener.displayMessage("Failed to resume existing session");
                         return false;
                     }
@@ -369,7 +371,7 @@ public class NvConnection {
     private boolean launchNotRunningApp(NvHTTP h, ConnectionContext context)
             throws IOException, XmlPullParserException {
         // Launch the app since it's not running
-        if (!h.launchApp(context, "launch", context.streamConfig.getApp().getAppId(), context.negotiatedHdr)) {
+        if (!h.launchApp(context, "launch", context.streamConfig.getApp().getAppUUID(), context.streamConfig.getApp().getAppId(), context.negotiatedHdr)) {
             context.connListener.displayMessage("Failed to launch application");
             return false;
         }
@@ -390,21 +392,46 @@ public class NvConnection {
 
                 context.connListener.stageStarting(appName);
 
-                try {
-                    if (!startApp()) {
-                        context.connListener.stageFailed(appName, 0, 0);
-                        return;
+                int tryCount = 0;
+
+                do {
+                    boolean retry = false;
+                    try {
+                        if (!startApp()) {
+                            retry = context.connListener.stageFailed(appName, 0, 0);
+                            if (!retry) {
+                                return;
+                            }
+                        }
+                        context.connListener.stageComplete(appName);
+                    } catch (HostHttpResponseException e) {
+                        e.printStackTrace();
+                        context.connListener.displayMessage(e.getMessage());
+                        retry = context.connListener.stageFailed(appName, 0, e.getErrorCode());
+                        if (!retry) {
+                            return;
+                        }
+                    } catch (XmlPullParserException | IOException e) {
+                        e.printStackTrace();
+                        context.connListener.displayMessage(e.getMessage());
+                        retry = context.connListener.stageFailed(appName, MoonBridge.ML_PORT_FLAG_TCP_47984 | MoonBridge.ML_PORT_FLAG_TCP_47989, tryCount < 2 ? 0 : -408);
+                        if (!retry) {
+                            return;
+                        }
                     }
-                    context.connListener.stageComplete(appName);
-                } catch (HostHttpResponseException e) {
-                    e.printStackTrace();
-                    context.connListener.displayMessage(e.getMessage());
-                    context.connListener.stageFailed(appName, 0, e.getErrorCode());
-                    return;
-                } catch (XmlPullParserException | IOException e) {
-                    e.printStackTrace();
-                    context.connListener.displayMessage(e.getMessage());
-                    context.connListener.stageFailed(appName, MoonBridge.ML_PORT_FLAG_TCP_47984 | MoonBridge.ML_PORT_FLAG_TCP_47989, 0);
+
+                    if (!retry) break;
+                    tryCount += 1;
+
+                    try {
+                        sleep(2000);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                } while (tryCount < 5);
+
+                if (tryCount >= 5) {
+                    context.connListener.stageFailed(appName, 0, -408);
                     return;
                 }
 
@@ -449,9 +476,19 @@ public class NvConnection {
             }
         }).start();
     }
+
+    public void sendExecServerCmd(final int cmdId) {
+        LimeLog.info("sendExecServerCmd: " + cmdId);
+
+        if (!isMonkey) {
+            MoonBridge.sendExecServerCmd(cmdId);
+        }
+    }
     
     public void sendMouseMove(final short deltaX, final short deltaY)
     {
+        LimeLog.info("sendMousePosition==1-"+deltaX+","+deltaY);
+
         if (!isMonkey) {
             MoonBridge.sendMouseMove(deltaX, deltaY);
         }
@@ -459,6 +496,7 @@ public class NvConnection {
 
     public void sendMousePosition(short x, short y, short referenceWidth, short referenceHeight)
     {
+        LimeLog.info("sendMousePosition==2");
         if (!isMonkey) {
             MoonBridge.sendMousePosition(x, y, referenceWidth, referenceHeight);
         }
@@ -466,6 +504,8 @@ public class NvConnection {
 
     public void sendMouseMoveAsMousePosition(short deltaX, short deltaY, short referenceWidth, short referenceHeight)
     {
+        LimeLog.info("sendMousePosition==3-"+deltaX);
+
         if (!isMonkey) {
             MoonBridge.sendMouseMoveAsMousePosition(deltaX, deltaY, referenceWidth, referenceHeight);
         }
@@ -473,6 +513,7 @@ public class NvConnection {
 
     public void sendMouseButtonDown(final byte mouseButton)
     {
+        LimeLog.info("sendMousePosition==4");
         if (!isMonkey) {
             MoonBridge.sendMouseButton(MouseButtonPacket.PRESS_EVENT, mouseButton);
         }
@@ -480,6 +521,7 @@ public class NvConnection {
     
     public void sendMouseButtonUp(final byte mouseButton)
     {
+        LimeLog.info("sendMousePosition==5");
         if (!isMonkey) {
             MoonBridge.sendMouseButton(MouseButtonPacket.RELEASE_EVENT, mouseButton);
         }

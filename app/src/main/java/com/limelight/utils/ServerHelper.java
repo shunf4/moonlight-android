@@ -22,6 +22,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.UnknownHostException;
 import java.security.cert.CertificateEncodingException;
+import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 
 public class ServerHelper {
     public static final String CONNECTION_TEST_SERVER = "android.conntest.moonlight-stream.org";
@@ -46,6 +48,7 @@ public class ServerHelper {
         i.putExtra(AppView.NAME_EXTRA, computer.name);
         i.putExtra(AppView.UUID_EXTRA, computer.uuid);
         i.putExtra(Game.EXTRA_APP_NAME, app.getAppName());
+        i.putExtra(Game.EXTRA_APP_UUID, app.getAppUUID());
         i.putExtra(Game.EXTRA_APP_ID, ""+app.getAppId());
         i.putExtra(Game.EXTRA_APP_HDR, app.isHdrSupported());
         i.setAction(Intent.ACTION_DEFAULT);
@@ -53,17 +56,22 @@ public class ServerHelper {
     }
 
     public static Intent createStartIntent(Activity parent, NvApp app, ComputerDetails computer,
-                                           ComputerManagerService.ComputerManagerBinder managerBinder) {
+                                           ComputerManagerService.ComputerManagerBinder managerBinder,
+                                           boolean withVDisplay) {
+
         Intent intent = new Intent(parent, Game.class);
         intent.putExtra(Game.EXTRA_HOST, computer.activeAddress.address);
         intent.putExtra(Game.EXTRA_PORT, computer.activeAddress.port);
         intent.putExtra(Game.EXTRA_HTTPS_PORT, computer.httpsPort);
         intent.putExtra(Game.EXTRA_APP_NAME, app.getAppName());
+        intent.putExtra(Game.EXTRA_APP_UUID, app.getAppUUID());
         intent.putExtra(Game.EXTRA_APP_ID, app.getAppId());
         intent.putExtra(Game.EXTRA_APP_HDR, app.isHdrSupported());
         intent.putExtra(Game.EXTRA_UNIQUEID, managerBinder.getUniqueId());
         intent.putExtra(Game.EXTRA_PC_UUID, computer.uuid);
         intent.putExtra(Game.EXTRA_PC_NAME, computer.name);
+        intent.putExtra(Game.EXTRA_VDISPLAY, withVDisplay);
+        intent.putExtra(Game.EXTRA_SERVER_COMMANDS, (ArrayList<String>) computer.serverCommands);
         try {
             if (computer.serverCert != null) {
                 intent.putExtra(Game.EXTRA_SERVER_CERT, computer.serverCert.getEncoded());
@@ -75,12 +83,12 @@ public class ServerHelper {
     }
 
     public static void doStart(Activity parent, NvApp app, ComputerDetails computer,
-                               ComputerManagerService.ComputerManagerBinder managerBinder) {
+                               ComputerManagerService.ComputerManagerBinder managerBinder, boolean withVDisplay) {
         if (computer.state == ComputerDetails.State.OFFLINE || computer.activeAddress == null) {
             Toast.makeText(parent, parent.getResources().getString(R.string.pair_pc_offline), Toast.LENGTH_SHORT).show();
             return;
         }
-        parent.startActivity(createStartIntent(parent, app, computer, managerBinder));
+        parent.startActivity(createStartIntent(parent, app, computer, managerBinder, withVDisplay));
     }
 
     public static void doNetworkTest(final Activity parent) {
@@ -116,25 +124,25 @@ public class ServerHelper {
     }
 
     public static void doQuit(final Activity parent,
-                              final ComputerDetails computer,
-                              final NvApp app,
-                              final ComputerManagerService.ComputerManagerBinder managerBinder,
-                              final Runnable onComplete) {
-        Toast.makeText(parent, parent.getResources().getString(R.string.applist_quit_app) + " " + app.getAppName() + "...", Toast.LENGTH_SHORT).show();
+                              final NvHTTP httpConn,
+                              final String appName,
+                              final Runnable onComplete,
+                              final Runnable onFail
+    ) {
+        parent.runOnUiThread(() -> Toast.makeText(parent, parent.getResources().getString(R.string.applist_quit_app) + " " + appName + "...", Toast.LENGTH_SHORT).show());
         new Thread(new Runnable() {
             @Override
             public void run() {
-                NvHTTP httpConn;
                 String message;
+                boolean failed = false;
                 try {
-                    httpConn = new NvHTTP(ServerHelper.getCurrentAddressFromComputer(computer), computer.httpsPort,
-                            managerBinder.getUniqueId(), computer.serverCert, PlatformBinding.getCryptoProvider(parent));
                     if (httpConn.quitApp()) {
-                        message = parent.getResources().getString(R.string.applist_quit_success) + " " + app.getAppName();
+                        message = parent.getResources().getString(R.string.applist_quit_success) + " " + appName;
                     } else {
-                        message = parent.getResources().getString(R.string.applist_quit_fail) + " " + app.getAppName();
+                        message = parent.getResources().getString(R.string.applist_quit_fail) + " " + appName;
                     }
                 } catch (HostHttpResponseException e) {
+                    failed = true;
                     if (e.getErrorCode() == 599) {
                         message = "This session wasn't started by this device," +
                                 " so it cannot be quit. End streaming on the original " +
@@ -144,26 +152,60 @@ public class ServerHelper {
                         message = e.getMessage();
                     }
                 } catch (UnknownHostException e) {
+                    failed = true;
                     message = parent.getResources().getString(R.string.error_unknown_host);
                 } catch (FileNotFoundException e) {
+                    failed = true;
                     message = parent.getResources().getString(R.string.error_404);
                 } catch (IOException | XmlPullParserException e) {
+                    failed = true;
                     message = e.getMessage();
                     e.printStackTrace();
                 } finally {
-                    if (onComplete != null) {
-                        onComplete.run();
+                    if (failed) {
+                        if (onFail != null) {
+                            onFail.run();
+                        }
+                    } else {
+                        if (onComplete != null) {
+                            onComplete.run();
+                        }
                     }
                 }
 
                 final String toastMessage = message;
-                parent.runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        Toast.makeText(parent, toastMessage, Toast.LENGTH_LONG).show();
-                    }
-                });
+                parent.runOnUiThread(() -> Toast.makeText(parent, toastMessage, Toast.LENGTH_LONG).show());
             }
         }).start();
+
+    }
+
+    public static void doQuit(final Activity parent,
+                              final ComputerDetails computer,
+                              final NvApp app,
+                              final ComputerManagerService.ComputerManagerBinder managerBinder,
+                              final Runnable onComplete
+    ) {
+        try {
+            NvHTTP httpConn = new NvHTTP(
+                    ServerHelper.getCurrentAddressFromComputer(computer),
+                    computer.httpsPort,
+                    managerBinder.getUniqueId(),
+                    computer.serverCert,
+                    PlatformBinding.getCryptoProvider(parent)
+            );
+            doQuit(
+                    parent,
+                    httpConn,
+                    app.getAppName(),
+                    onComplete,
+                    null
+            );
+        } catch (Exception e) {
+            e.printStackTrace();
+
+            final String toastMessage = e.getMessage();
+            parent.runOnUiThread(() -> Toast.makeText(parent, toastMessage, Toast.LENGTH_LONG).show());
+        }
     }
 }
