@@ -165,6 +165,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
     private static final int THREE_FINGER_TAP_THRESHOLD = 300;
     private static final int FOUR_FINGER_TAP_THRESHOLD = 300;
+
+    private static final int FOUR_FINGER_LONG_PRESS_THRESHOLD = 700;
     private static final int FIVE_FINGER_TAP_THRESHOLD = 300;
 
     private ControllerHandler controllerHandler;
@@ -303,6 +305,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private boolean clipboardSyncRunning = false;
 
     private NvHTTP httpConn;
+    private Integer lastMouseMode = null;
 
     public interface GameMenuCallbacks {
         void showMenu(GameInputDevice devic);
@@ -478,7 +481,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         backgroundTouchView.getRootView().getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
             @Override
             public void onGlobalLayout() {
-                initTouchContexts();
+                applyMouseMode(null);
             }
         });
 
@@ -818,8 +821,6 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             trackpadContextMap[i] = new TrackpadContext(conn, i, prefConfig.trackpadSwapAxis, prefConfig.trackpadSensitivityX, prefConfig.trackpadSensitivityY);
         }
 
-        initTouchContexts();
-
         if (prefConfig.onscreenController) {
             // create virtual onscreen controller
             if (prefConfig.hideOSCWhenHasGamepad) {
@@ -964,34 +965,35 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     }
 
     private void setPreferredOrientationForCurrentDisplay() {
-        if (prefConfig.shouldUserRotateLandscapeAtStart) {
-            try {
-                Settings.System.putInt(getContentResolver(), Settings.System.USER_ROTATION, 1);
-            } catch (Throwable t) {
-                Log.w(Game.class.getSimpleName(), Log.getStackTraceString(t));
-                ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-
-                if (clipboard != null) {
-                    ClipData clip = ClipData.newPlainText("text", "appops set com.limelight.shunf4_mod WRITE_SETTINGS allow; appops set com.limelight.shunf4_mod WRITE_SECURE_SETTINGS allow; pm grant com.limelight.shunf4_mod android.permission.WRITE_SETTINGS; pm grant com.limelight.shunf4_mod android.permission.WRITE_SECURE_SETTINGS; ");
-                    clipboard.setPrimaryClip(clip);
-                }
-
-                Toast.makeText(this, "Rotate: system denied. Copied grant command to clipboard.", Toast.LENGTH_LONG).show();
-            }
-        }
-        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_USER);
-//        Handler h = new Handler();
-//        h.postDelayed(new Runnable() {
-//            @Override
-//            public void run() {
-//                // setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_USER);
-//                // setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+        // shunf4 mod: shunf4 old logic, commented out
+//        if (prefConfig.shouldUserRotateLandscapeAtStart) {
+//            try {
+//                Settings.System.putInt(getContentResolver(), Settings.System.USER_ROTATION, 1);
+//            } catch (Throwable t) {
+//                Log.w(Game.class.getSimpleName(), Log.getStackTraceString(t));
+//                ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+//
+//                if (clipboard != null) {
+//                    ClipData clip = ClipData.newPlainText("text", "appops set com.limelight.shunf4_mod WRITE_SETTINGS allow; appops set com.limelight.shunf4_mod WRITE_SECURE_SETTINGS allow; pm grant com.limelight.shunf4_mod android.permission.WRITE_SETTINGS; pm grant com.limelight.shunf4_mod android.permission.WRITE_SECURE_SETTINGS; ");
+//                    clipboard.setPrimaryClip(clip);
+//                }
+//
+//                Toast.makeText(this, "Rotate: system denied. Copied grant command to clipboard.", Toast.LENGTH_LONG).show();
 //            }
-//        }, 3000);
-        return;
-    }
-        
-    private void setPreferredOrientationForCurrentDisplay___unusedunused() {
+//        }
+//        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_USER);
+////        Handler h = new Handler();
+////        h.postDelayed(new Runnable() {
+////            @Override
+////            public void run() {
+////                // setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_USER);
+////                // setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+////            }
+////        }, 3000);
+//        return;
+//    }
+//
+//    private void setPreferredOrientationForCurrentDisplay___unusedunused() {
         Display display = getWindowManager().getDefaultDisplay();
 
         // For semi-square displays, we use more complex logic to determine which orientation to use (if any)
@@ -1250,138 +1252,6 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         // With Android native pointer capture, capture is lost when focus is lost,
         // so it must be requested again when focus is regained.
         inputCaptureProvider.onWindowFocusChanged(hasFocus);
-    }
-
-    private void initTouchContexts() {
-        // Initialize touch contexts
-
-        TouchContext.ScaleTransformCallback scaleTransformCallback = (tx, ty, s, c) -> {
-            float currScale = Double.isNaN(s) ? pendingScale : (float)(savedScale * s);
-            float currTranslateX = tx == -1 ? pendingTranslateX : (float)(s * savedTranslateX + tx);
-            float currTranslateY = ty == -1 ? pendingTranslateY : (float)(s * savedTranslateY + ty);
-
-            if (Float.isNaN(currScale) || Float.isNaN(currTranslateX) || Float.isNaN(currTranslateY)) {
-                return;
-            }
-
-            if (c) {
-                savedScale = currScale;
-                savedTranslateX = currTranslateX;
-                savedTranslateY = currTranslateY;
-                if (Math.abs(savedTranslateX) > 3000.0f || Math.abs(savedTranslateY) > 2500.0f || savedScale > 40.0f || savedScale < 0.03f) {
-                    savedScale = 1.0f;
-                    savedTranslateX = 0.0f;
-                    savedTranslateY = 0.0f;
-                }
-                currScale = savedScale;
-                currTranslateX = savedTranslateX;
-                currTranslateY = savedTranslateY;
-
-                pendingScale = Float.NaN;
-                pendingTranslateX = Float.NaN;
-                pendingTranslateY = Float.NaN;
-            } else {
-                pendingScale = currScale;
-                pendingTranslateX = currTranslateX;
-                pendingTranslateY = currTranslateY;
-            }
-
-            streamView.setTranslationX(currTranslateX);
-            streamView.setTranslationY(currTranslateY);
-            streamView.setScaleX(currScale);
-            streamView.setScaleY(currScale);
-        };
-
-        DisplayMetrics screen = getResources().getDisplayMetrics();
-
-        Vibrator vibrator;
-        if (Build.VERSION.SDK_INT>=31) {
-            VibratorManager vibratorManager = (VibratorManager) getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
-            vibrator = vibratorManager.getDefaultVibrator();
-        }
-        else {
-            vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-        }
-
-        for (int i = 0; i < touchContextMap.length; i++) {
-            if (prefConfig.shouldDisableControl) {
-                touchContextMap[i] = new ScaleTranslateOnlyTouchContext(conn, i, streamView,
-                        backgroundTouchView.getWidth(),
-                        backgroundTouchView.getHeight(),
-                        prefConfig.modeLongPressNeededToDrag,
-                        prefConfig.edgeSingleFingerScrollWidth,
-                        prefConfig.shouldDoubleClickDragTranslate,
-                        prefConfig.absoluteTouchTapOnlyPlacesMouse,
-                        vibrator,
-                        (otherTouchIndex) -> {
-                            TouchContext otherTouchContext = touchContextMap[otherTouchIndex];
-                            return Pair.create(otherTouchContext.getLastTouchX(), otherTouchContext.getLastTouchY());
-                        },
-                        scaleTransformCallback,
-                        () -> confirmedScaleTranslate,
-                        (x) -> { confirmedScaleTranslate = x; },
-                        () -> doubleFingerInitialSpacing,
-                        (x) -> { doubleFingerInitialSpacing = x; },
-                        () -> doubleFingerInitialMidpointX,
-                        (x) -> { doubleFingerInitialMidpointX = x; },
-                        () -> doubleFingerInitialMidpointY,
-                        (y) -> { doubleFingerInitialMidpointY = y; }
-                );
-            } else if (!prefConfig.touchscreenTrackpad) {
-                touchContextMap[i] = new AbsoluteTouchContext(conn, i, streamView,
-                        backgroundTouchView.getWidth(),
-                        backgroundTouchView.getHeight(),
-                        prefConfig.modeLongPressNeededToDrag,
-                        prefConfig.edgeSingleFingerScrollWidth,
-                        prefConfig.scrollFactor2,
-                        prefConfig.shouldDoubleClickDragTranslate,
-                        prefConfig.absoluteTouchTapOnlyPlacesMouse,
-                        vibrator,
-                        (otherTouchIndex) -> {
-                            TouchContext otherTouchContext = touchContextMap[otherTouchIndex];
-                            return Pair.create(otherTouchContext.getLastTouchX(), otherTouchContext.getLastTouchY());
-                        },
-                        scaleTransformCallback,
-                        () -> confirmedScaleTranslate,
-                        (x) -> { confirmedScaleTranslate = x; },
-                        () -> doubleFingerInitialSpacing,
-                        (x) -> { doubleFingerInitialSpacing = x; },
-                        () -> doubleFingerInitialMidpointX,
-                        (x) -> { doubleFingerInitialMidpointX = x; },
-                        () -> doubleFingerInitialMidpointY,
-                        (y) -> { doubleFingerInitialMidpointY = y; }
-                );
-            }
-            else {
-                touchContextMap[i] = new RelativeTouchContext(conn, i,
-                        REFERENCE_HORIZ_RES / (prefConfig.isCurrDeviceLikeOnyx ? 2 : 1), REFERENCE_VERT_RES / (prefConfig.isCurrDeviceLikeOnyx ? 2 : 1),
-                        streamView,
-                        prefConfig,
-                        backgroundTouchView.getWidth(),
-                        backgroundTouchView.getHeight(),
-                        prefConfig.edgeSingleFingerScrollWidth,
-                        prefConfig.scrollFactor2,
-                        prefConfig.shouldDoubleClickDragTranslate,
-                        prefConfig.shouldRelativeLongPressRightClick,
-                        vibrator,
-                        () -> lastLeftMouseTapTime,
-                        x -> { lastLeftMouseTapTime = x; },
-                        (otherTouchIndex) -> {
-                            TouchContext otherTouchContext = touchContextMap[otherTouchIndex];
-                            return Pair.create(otherTouchContext.getLastTouchX(), otherTouchContext.getLastTouchY());
-                        },
-                        scaleTransformCallback,
-                        () -> confirmedScaleTranslate,
-                        (x) -> { confirmedScaleTranslate = x; },
-                        () -> doubleFingerInitialSpacing,
-                        (x) -> { doubleFingerInitialSpacing = x; },
-                        () -> doubleFingerInitialMidpointX,
-                        (x) -> { doubleFingerInitialMidpointX = x; },
-                        () -> doubleFingerInitialMidpointY,
-                        (y) -> { doubleFingerInitialMidpointY = y; }
-                );
-            }
-        }
     }
 
     private boolean isRefreshRateEqualMatch(float refreshRate) {
@@ -2946,13 +2816,13 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && event.getClassification() == MotionEvent.CLASSIFICATION_TWO_FINGER_SWIPE) {
                             if (!pointerSwiping) {
                                 pointerSwiping = true;
-                                handleTouchInput(event, trackpadContextMap, false, MotionEvent.ACTION_POINTER_DOWN, 1, 2);
+                                handleTouchInput(view, event, trackpadContextMap, false, MotionEvent.ACTION_POINTER_DOWN, 1, 2);
                             }
-                            return handleTouchInput(event, trackpadContextMap, false, MotionEvent.ACTION_MOVE, 1, 2);
+                            return handleTouchInput(view, event, trackpadContextMap, false, MotionEvent.ACTION_MOVE, 1, 2);
                         } else if (pointerSwiping && eventAction == MotionEvent.ACTION_UP) {
                             pointerSwiping = false;
                             synthClickPending = false;
-                            handleTouchInput(event, trackpadContextMap, false, MotionEvent.ACTION_POINTER_UP, 1, 2);
+                            handleTouchInput(view, event, trackpadContextMap, false, MotionEvent.ACTION_POINTER_UP, 1, 2);
                             return true;
                         }
 
@@ -3134,7 +3004,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             // This case is for fingers
             else {
                 if (eventSource == InputDevice.SOURCE_TOUCHPAD) {
-                    return handleTouchInput(event, trackpadContextMap, false);
+                    return handleTouchInput(view, event, trackpadContextMap, false);
                 } else {
                     // Log.i("Game", "fingerEvent " + event.toString());
                 if (virtualController != null &&
@@ -3178,7 +3048,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         return true;
                     }
 
-                    return handleTouchInput(event, touchContextMap, true);
+                    return handleTouchInput(view, event, touchContextMap, true);
                 }
             }
 
@@ -3190,11 +3060,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         return false;
     }
 
-    private boolean handleTouchInput(MotionEvent event, TouchContext[] inputContextMap, boolean isTouchScreen) {
-        return handleTouchInput(event, inputContextMap, isTouchScreen, event.getActionMasked(), event.getActionIndex(), event.getPointerCount());
+    private boolean handleTouchInput(View view, MotionEvent event, TouchContext[] inputContextMap, boolean isTouchScreen) {
+        return handleTouchInput(view, event, inputContextMap, isTouchScreen, event.getActionMasked(), event.getActionIndex(), event.getPointerCount());
     }
 
-    private boolean handleTouchInput(MotionEvent event, TouchContext[] inputContextMap, boolean isTouchScreen, int eventAction, int actionIndex, int pointerCount) {
+    private boolean handleTouchInput(View view, MotionEvent event, TouchContext[] inputContextMap, boolean isTouchScreen, int eventAction, int actionIndex, int pointerCount) {
         // Log.i("Game", "fingerEvent " + event.toString());
         int actualActionIndex = event.getActionIndex();
         int actualPointerCount = event.getPointerCount();
@@ -3263,7 +3133,6 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
                 return true;
             } else if (event.getPointerCount() == 4) {
-                fourFingerDownTime = event.getEventTime();
                 threeFingerDownTime = 0L;
                 threeFingerDownAvgX = Float.NaN;
                 threeFingerUpAvgX = Float.NaN;
@@ -3311,6 +3180,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                             if (threeFingerUpAvgY - threeFingerDownAvgY <= -170.0f) {
                                 toggleKeyboard();
                             } else if (threeFingerUpAvgY - threeFingerDownAvgY > 170.0f) {
+                                prefConfig.enableMultiTouchScreen = false;
                                 prefConfig.touchscreenTrackpad = !prefConfig.touchscreenTrackpad;
                                 if (event.getEventTime() - lastThreeDownSwipe < 1300) {
                                     lastThreeDownSwipe = 0;
@@ -3325,7 +3195,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                                     lastThreeDownSwipe = event.getEventTime();
                                     Toast.makeText(this, "Switched to " + (prefConfig.touchscreenTrackpad ? "trackpad" : "direct mouse control"), Toast.LENGTH_SHORT).show();
                                 }
-                                initTouchContexts();
+                                applyMouseMode(99);
                                 lastThreeLeftRightSwipe = 0;
                             } else if (threeFingerUpAvgX - threeFingerDownAvgX < -170.0f) {
                                 conn.sendMousePosition((short) (streamView.getWidth() / 2), (short) (streamView.getHeight() / 2), (short) streamView.getWidth(), (short) streamView.getHeight());
@@ -3403,26 +3273,16 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                             return true;
                         }
 
-                        if (event.getEventTime() - fourFingerDownTime < THREE_FINGER_TAP_THRESHOLD) {
-                            streamView.setTranslationX(0.0f);
-                            streamView.setTranslationY(0.0f);
-                            streamView.setScaleX(1.0f);
-                            streamView.setScaleY(1.0f);
-                            savedScale = 1.0f;
-                            savedTranslateX = 0.0f;
-                            savedTranslateY = 0.0f;
-                            conn.sendMousePosition((short) (streamView.getWidth() / 2), (short) (streamView.getHeight() / 2), (short) streamView.getWidth(), (short) streamView.getHeight());
-                            Toast.makeText(this, "Reset transform and mouse position", Toast.LENGTH_SHORT).show();
-                            return true;
-                        }
-
                         long currentEventTime = event.getEventTime();
                         if (currentEventTime - threeFingerDownTime < THREE_FINGER_TAP_THRESHOLD) {
                             // This is a 3 finger tap to bring up the keyboard
                             toggleKeyboard();
                             return true;
-                        } else if (currentEventTime - fourFingerDownTime < FOUR_FINGER_TAP_THRESHOLD) {
+                        } else if (fourFingerDownTime > 0 && currentEventTime - fourFingerDownTime < FOUR_FINGER_TAP_THRESHOLD) {
                             showHidekeyBoardLayoutController();
+                            return true;
+                        } else if (fourFingerDownTime > 0 && currentEventTime - fourFingerDownTime >= FOUR_FINGER_LONG_PRESS_THRESHOLD) {
+                            resetTranslationAndScale();
                             return true;
                         } else if (currentEventTime - fiveFingerDownTime < FIVE_FINGER_TAP_THRESHOLD) {
                             if(prefConfig.enableBackMenu) {
@@ -3439,7 +3299,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                     context.cancelTouch();
                 }
                 else {
-                    context.touchUpEvent(eventX, eventY, xRelScreenViewInt_shunf4ModLogic, yRelScreenViewInt_shunf4ModLogic, event.getEventTime());
+                    context.touchUpEvent(origEventX, origEventY, xRelScreenViewInt_shunf4ModLogic, yRelScreenViewInt_shunf4ModLogic, event.getEventTime());
                 }
 
                 for (TouchContext touchContext : inputContextMap) {
@@ -3493,8 +3353,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                     context.touchDownEvent(
                                 eventXT1Origin_shunf4ModLogic,
                                 eventYT1Origin_shunf4ModLogic,
-                                xRelScreenViewT1Int,
-                                yRelScreenViewT1Int,
+                                xRelScreenViewT1Int_shunf4ModLogic,
+                                yRelScreenViewT1Int_shunf4ModLogic,
                                 event.getEventTime(), false);
                 }
                 break;
@@ -3611,10 +3471,10 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         //         event.getEventTime());
 
                         aTouchContextMap.touchMoveEvent(
-                                    eventXCurr,
-                                    eventYCurr,
-                                    xRelScreenViewCurrInt,
-                                    yRelScreenViewCurrInt,
+                                    eventXCurrOrigin_shunf4ModLogic,
+                                    eventYCurrOrigin_shunf4ModLogic,
+                                    xRelScreenViewCurrInt_shunf4ModLogic,
+                                    yRelScreenViewCurrInt_shunf4ModLogic,
                                     event.getEventTime());
                     }
                 }
@@ -3636,7 +3496,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
         if (eventAction == MotionEvent.ACTION_POINTER_DOWN) {
             if (pointerCount == 3) {
-                threeFingerDownTime = event.getEventTime();
+                // shunf4 mod: to support three-finger swipe gesture above, ignore handlers here
+//                threeFingerDownTime = event.getEventTime();
             } else if (pointerCount == 4) {
                 threeFingerDownTime = 0;
                 fourFingerDownTime = event.getEventTime();
@@ -3661,12 +3522,18 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                     showHidekeyBoardLayoutController();
                     fourFingerDownTime = 0;
                     break;
-                } else if (pointerCount == 3 && threeFingerDownTime > 0 && currentEventTime - threeFingerDownTime < THREE_FINGER_TAP_THRESHOLD) {
-                    toggleKeyboard();
-                    threeFingerDownTime = 0;
+                } else if (pointerCount == 4 && fourFingerDownTime > 0 && currentEventTime - fourFingerDownTime >= FOUR_FINGER_LONG_PRESS_THRESHOLD) {
+                    resetTranslationAndScale();
+                    fourFingerDownTime = 0;
                     break;
+                } else if (pointerCount == 3 && threeFingerDownTime > 0 && currentEventTime - threeFingerDownTime < THREE_FINGER_TAP_THRESHOLD) {
+                    // shunf4 mod: to support three-finger swipe gesture above, ignore handlers here
+//                    toggleKeyboard();
+//                    threeFingerDownTime = 0;
+                    // shunf4 mod: don't break here, because we don't want it return true (handled)
+//                    break;
                 }
-                threeFingerDownTime = 0;
+//                threeFingerDownTime = 0;
                 fourFingerDownTime = 0;
                 fiveFingerDownTime = 0;
 
@@ -3678,6 +3545,18 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
         cancelStaleTouchState(event, view);
         return true;
+    }
+
+    private void resetTranslationAndScale() {
+        streamView.setTranslationX(0.0f);
+        streamView.setTranslationY(0.0f);
+        streamView.setScaleX(1.0f);
+        streamView.setScaleY(1.0f);
+        savedScale = 1.0f;
+        savedTranslateX = 0.0f;
+        savedTranslateY = 0.0f;
+        conn.sendMousePosition((short) (streamView.getWidth() / 2), (short) (streamView.getHeight() / 2), (short) streamView.getWidth(), (short) streamView.getHeight());
+        Toast.makeText(this, "Reset transform and mouse position", Toast.LENGTH_SHORT).show();
     }
 
     private void cancelStaleTouchState(MotionEvent event, View view) {
@@ -4448,8 +4327,18 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         }
     }
 
-    private void applyMouseMode(int mode) {
+    private void applyMouseMode(Integer mode) {
+        if (mode == null) {
+            if (lastMouseMode == null) {
+                return;
+            } else {
+                mode = lastMouseMode.intValue();
+            }
+        }
+        lastMouseMode = mode;
         switch (mode) {
+            case 99: // shunf4 mod compatible logic
+                break;
             case 0: // Multi-touch
             prefConfig.enableMultiTouchScreen = true;
             prefConfig.touchscreenTrackpad = false;
@@ -4471,15 +4360,135 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         }
 
         //Initialize touch contexts
+
+        TouchContext.ScaleTransformCallback scaleTransformCallback = (tx, ty, s, c) -> {
+            float currScale = Double.isNaN(s) ? pendingScale : (float)(savedScale * s);
+            float currTranslateX = tx == -1 ? pendingTranslateX : (float)(s * savedTranslateX + tx);
+            float currTranslateY = ty == -1 ? pendingTranslateY : (float)(s * savedTranslateY + ty);
+
+            if (Float.isNaN(currScale) || Float.isNaN(currTranslateX) || Float.isNaN(currTranslateY)) {
+                return;
+            }
+
+            if (c) {
+                savedScale = currScale;
+                savedTranslateX = currTranslateX;
+                savedTranslateY = currTranslateY;
+                if (Math.abs(savedTranslateX) > 3000.0f || Math.abs(savedTranslateY) > 2500.0f || savedScale > 40.0f || savedScale < 0.03f) {
+                    savedScale = 1.0f;
+                    savedTranslateX = 0.0f;
+                    savedTranslateY = 0.0f;
+                }
+                currScale = savedScale;
+                currTranslateX = savedTranslateX;
+                currTranslateY = savedTranslateY;
+
+                pendingScale = Float.NaN;
+                pendingTranslateX = Float.NaN;
+                pendingTranslateY = Float.NaN;
+            } else {
+                pendingScale = currScale;
+                pendingTranslateX = currTranslateX;
+                pendingTranslateY = currTranslateY;
+            }
+
+            streamView.setTranslationX(currTranslateX);
+            streamView.setTranslationY(currTranslateY);
+            streamView.setScaleX(currScale);
+            streamView.setScaleY(currScale);
+        };
+
+        DisplayMetrics screen = getResources().getDisplayMetrics();
+
+        Vibrator vibrator;
+        if (Build.VERSION.SDK_INT>=31) {
+            VibratorManager vibratorManager = (VibratorManager) getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+            vibrator = vibratorManager.getDefaultVibrator();
+        }
+        else {
+            vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+        }
+
         for (int i = 0; i < touchContextMap.length; i++) {
             if (touchContextMap[i] != null) touchContextMap[i].cancelTouch();
             if (mode == 4) {
                 // Touch mouse disabled
                 touchContextMap[i] = null;
+            } else if (prefConfig.shouldDisableControl) {
+                touchContextMap[i] = new ScaleTranslateOnlyTouchContext(conn, i, streamView,
+                        backgroundTouchView.getWidth(),
+                        backgroundTouchView.getHeight(),
+                        prefConfig.modeLongPressNeededToDrag,
+                        prefConfig.edgeSingleFingerScrollWidth,
+                        prefConfig.shouldDoubleClickDragTranslate,
+                        prefConfig.absoluteTouchTapOnlyPlacesMouse,
+                        vibrator,
+                        (otherTouchIndex) -> {
+                            TouchContext otherTouchContext = touchContextMap[otherTouchIndex];
+                            return Pair.create(otherTouchContext.getLastTouchX(), otherTouchContext.getLastTouchY());
+                        },
+                        scaleTransformCallback,
+                        () -> confirmedScaleTranslate,
+                        (x) -> { confirmedScaleTranslate = x; },
+                        () -> doubleFingerInitialSpacing,
+                        (x) -> { doubleFingerInitialSpacing = x; },
+                        () -> doubleFingerInitialMidpointX,
+                        (x) -> { doubleFingerInitialMidpointX = x; },
+                        () -> doubleFingerInitialMidpointY,
+                        (y) -> { doubleFingerInitialMidpointY = y; }
+                );
             } else if (!prefConfig.touchscreenTrackpad) {
-                touchContextMap[i] = new AbsoluteTouchContext(conn, i, streamView, mode == 5);
-            } else if (mode == 3) {
-                touchContextMap[i] = new RelativeTouchContext(conn, i, REFERENCE_HORIZ_RES, REFERENCE_VERT_RES, streamView, prefConfig);
+                touchContextMap[i] = new AbsoluteTouchContext(conn, i, streamView, mode == 5,
+                        backgroundTouchView.getWidth(),
+                        backgroundTouchView.getHeight(),
+                        prefConfig.modeLongPressNeededToDrag,
+                        prefConfig.edgeSingleFingerScrollWidth,
+                        prefConfig.scrollFactor2,
+                        prefConfig.shouldDoubleClickDragTranslate,
+                        prefConfig.absoluteTouchTapOnlyPlacesMouse,
+                        vibrator,
+                        (otherTouchIndex) -> {
+                            TouchContext otherTouchContext = touchContextMap[otherTouchIndex];
+                            return Pair.create(otherTouchContext.getLastTouchX(), otherTouchContext.getLastTouchY());
+                        },
+                        scaleTransformCallback,
+                        () -> confirmedScaleTranslate,
+                        (x) -> { confirmedScaleTranslate = x; },
+                        () -> doubleFingerInitialSpacing,
+                        (x) -> { doubleFingerInitialSpacing = x; },
+                        () -> doubleFingerInitialMidpointX,
+                        (x) -> { doubleFingerInitialMidpointX = x; },
+                        () -> doubleFingerInitialMidpointY,
+                        (y) -> { doubleFingerInitialMidpointY = y; }
+                );
+            } else if (mode == 3 || mode == 99) {
+                touchContextMap[i] = new RelativeTouchContext(conn, i,
+                        REFERENCE_HORIZ_RES / (prefConfig.isCurrDeviceLikeOnyx ? 2 : 1), REFERENCE_VERT_RES / (prefConfig.isCurrDeviceLikeOnyx ? 2 : 1),
+                        streamView,
+                        prefConfig,
+                        backgroundTouchView.getWidth(),
+                        backgroundTouchView.getHeight(),
+                        prefConfig.edgeSingleFingerScrollWidth,
+                        prefConfig.scrollFactor2,
+                        prefConfig.shouldDoubleClickDragTranslate,
+                        prefConfig.shouldRelativeLongPressRightClick,
+                        vibrator,
+                        () -> lastLeftMouseTapTime,
+                        x -> { lastLeftMouseTapTime = x; },
+                        (otherTouchIndex) -> {
+                            TouchContext otherTouchContext = touchContextMap[otherTouchIndex];
+                            return Pair.create(otherTouchContext.getLastTouchX(), otherTouchContext.getLastTouchY());
+                        },
+                        scaleTransformCallback,
+                        () -> confirmedScaleTranslate,
+                        (x) -> { confirmedScaleTranslate = x; },
+                        () -> doubleFingerInitialSpacing,
+                        (x) -> { doubleFingerInitialSpacing = x; },
+                        () -> doubleFingerInitialMidpointX,
+                        (x) -> { doubleFingerInitialMidpointX = x; },
+                        () -> doubleFingerInitialMidpointY,
+                        (y) -> { doubleFingerInitialMidpointY = y; }
+                );
             } else {
                 touchContextMap[i] = new TrackpadContext(conn, i);
             }

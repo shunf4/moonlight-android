@@ -55,6 +55,18 @@ public class TrackpadContext implements TouchContext {
         return actionIndex;
     }
 
+    @Override
+    public int getLastTouchX() {
+        // unused
+        return 0;
+    }
+
+    @Override
+    public int getLastTouchY() {
+        // unused
+        return 0;
+    }
+
     private boolean isWithinTapBounds(int touchX, int touchY) {
         int xDelta = Math.abs(touchX - originalTouchX);
         int yDelta = Math.abs(touchY - originalTouchY);
@@ -83,9 +95,9 @@ public class TrackpadContext implements TouchContext {
     }
 
     @Override
-    public boolean touchDownEvent(int eventX, int eventY, long eventTime, boolean isNewFinger) {
-        originalTouchX = lastTouchX = eventX;
-        originalTouchY = lastTouchY = eventY;
+    public boolean touchDownEvent(int eventX, int eventY, int xRel, int yRel, long eventTime, boolean isNewFinger) {
+        originalTouchX = lastTouchX = xRel;
+        originalTouchY = lastTouchY = yRel;
 
         if (isNewFinger) {
             maxPointerCountInGesture = pointerCount;
@@ -112,7 +124,7 @@ public class TrackpadContext implements TouchContext {
     }
 
     @Override
-    public void touchUpEvent(int eventX, int eventY, long eventTime) {
+    public void touchUpEvent(int eventX, int eventY, int xRel, int yRel, long eventTime) {
         if (cancelled) {
             return;
         }
@@ -148,36 +160,36 @@ public class TrackpadContext implements TouchContext {
     }
 
     @Override
-    public boolean touchMoveEvent(int eventX, int eventY, long eventTime) {
+    public boolean touchMoveEvent(int eventX, int eventY, int xRel, int yRel, long eventTime) {
         if (cancelled) {
             return true;
         }
 
-        if (eventX != lastTouchX || eventY != lastTouchY) {
-            checkForConfirmedMove(eventX, eventY);
+        if (xRel != lastTouchX || yRel != lastTouchY) {
+            checkForConfirmedMove(xRel, yRel);
 
             if (isDblClickPending) {
                 isDblClickPending = false;
                 confirmedDrag = true;
             }
 
-            int absDeltaX = Math.abs(eventX - lastTouchX);
-            int absDeltaY = Math.abs(eventY - lastTouchY);
+            int absDeltaX = Math.abs(xRel - lastTouchX);
+            int absDeltaY = Math.abs(yRel - lastTouchY);
 
             float deltaX, deltaY;
             if (swapAxis) {
-                deltaY = (eventX < lastTouchX) ? -absDeltaX : absDeltaX;
-                deltaX = (eventY < lastTouchY) ? -absDeltaY : absDeltaY;
+                deltaY = (xRel < lastTouchX) ? -absDeltaX : absDeltaX;
+                deltaX = (yRel < lastTouchY) ? -absDeltaY : absDeltaY;
             } else {
-                deltaX = (eventX < lastTouchX) ? -absDeltaX : absDeltaX;
-                deltaY = (eventY < lastTouchY) ? -absDeltaY : absDeltaY;
+                deltaX = (xRel < lastTouchX) ? -absDeltaX : absDeltaX;
+                deltaY = (yRel < lastTouchY) ? -absDeltaY : absDeltaY;
             }
 
             deltaX *= sensitivityX;
             deltaY *= sensitivityY;
 
-            lastTouchX = eventX;
-            lastTouchY = eventY;
+            lastTouchX = xRel;
+            lastTouchY = yRel;
 
             if (pointerCount == 1) {
                 conn.sendMouseMove((short) deltaX, (short) deltaY);

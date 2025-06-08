@@ -668,7 +668,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                         EGL14.EGL_NONE
                 };
 
-                eglSurface[0] = EGL14.eglCreateWindowSurface(eglDisplay[0], configs[0], renderTarget.getSurface(), surfaceAttribs, 0);
+                eglSurface[0] = EGL14.eglCreateWindowSurface(eglDisplay[0], configs[0], renderTarget, surfaceAttribs, 0);
 
                 err = EGL14.eglGetError();
                 if (err != EGL14.EGL_SUCCESS)
@@ -1239,7 +1239,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
                         GLES20.glClearColor(1f, 0f, 0f, 0f);
 
-                        GLES20.glViewport(0, 0, surfaceWidth, surfaceHeight);
+                        GLES20.glViewport(0, 0, format.getInteger(MediaFormat.KEY_WIDTH), format.getInteger(MediaFormat.KEY_HEIGHT));
 
                         GLES20.glUseProgram(program[0]);
 
